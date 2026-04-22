@@ -138,6 +138,11 @@ export const realDataService = {
 
   async logAction(userId: string | undefined, action: string, details: string) {
     try {
+      const token = sessionService.getToken();
+      if (!token) {
+        return; // Skip logging if not authenticated (e.g., during public registration)
+      }
+      
       // Parse action type and resource
       const actionType = action.split('_')[0].toUpperCase();
       let resourceType = 'general';
