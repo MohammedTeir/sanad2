@@ -1,0 +1,580 @@
+// views/camp-manager/StaffManagement.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { realDataService } from '../../services/realDataServiceBackend';
+import { sessionService } from '../../services/sessionService';
+import { User, Role } from '../../types';
+import Toast from '../../components/Toast';
+import ConfirmModal from '../../components/ConfirmModal';
+import { SearchInput, DateRangeFilter, FilterPanel } from '../../components/filters';
+import { normalizeArabic, matchesArabicSearchMulti } from '../../utils/arabicTextUtils';
+
+interface StaffMember extends User {
+  lastLogin?: string;
+}
+
+const StaffManagement: React.FC = () => {
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [currentCampId, setCurrentCampId] = useState<string>('');
+  const [generatedPassword, setGeneratedPassword] = useState<string>('');
+
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterLastLoginStart, setFilterLastLoginStart] = useState<string>('');
+  const [filterLastLoginEnd, setFilterLastLoginEnd] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<string | null>(null);
+  const [staffToResetPassword, setStaffToResetPassword] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    phoneNumber: '',
+    password: '',
+    isActive: true
+  });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    const currentUser = sessionService.getCurrentUser();
+    if (currentUser?.campId) {
+      setCurrentCampId(currentUser.campId);
+    } else {
+      setLoading(false);
+      setToast({ message: 'لم يتم تحديد المخيم. يرجى تسجيل الدخول كمدير مخيم.', type: 'error' });
+    }
+  }, []);
+
+  const loadStaff = useCallback(async () => {
+    try {
+      setLoading(true);
+      setToast(null);
+
+      if (!currentCampId) {
+        setToast({ message: 'لم يتم تحديد المخيم. يرجى تسجيل الدخول كمدير مخيم.', type: 'error' });
+        setStaff([]);
+        setLoading(false);
+        return;
+      }
+
+      const allUsers = await realDataService.getUsers();
+      const campStaff = allUsers.filter((user: User) =>
+        user.role === Role.FIELD_OFFICER &&
+        user.campId === currentCampId
+      );
+      setStaff(campStaff);
+    } catch (err: any) {
+      console.error('Error loading staff:', err);
+      setToast({ message: err.message || 'فشل تحميل أعضاء الطاقم. تأكد من تشغيل الخادم الخلفي.', type: 'error' });
+      setStaff([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCampId]);
+
+  useEffect(() => {
+    if (currentCampId) {
+      loadStaff();
+    }
+  }, [currentCampId, loadStaff]);
+
+  const generatePassword = (): string => {
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const symbols = '!@#$%^&*';
+    const all = uppercase + lowercase + numbers + symbols;
+    
+    let password = '';
+    password += uppercase[Math.floor(Math.random() * uppercase.length)];
+    password += lowercase[Math.floor(Math.random() * lowercase.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += symbols[Math.floor(Math.random() * symbols.length)];
+    
+    for (let i = 0; i < 8; i++) {
+      password += all[Math.floor(Math.random() * all.length)];
+    }
+    
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+  };
+
+  const handleAddStaff = async () => {
+    if (!formData.email || !formData.firstName || !formData.lastName) {
+      setToast({ message: 'يرجى ملء جميع الحقول المطلوبة', type: 'error' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setToast({ message: 'يرجى إدخال بريد إلكتروني صحيح', type: 'error' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const password = generatePassword();
+      setGeneratedPassword(password);
+
+      await realDataService.createUser({
+        email: formData.email,
+        password: password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber,
+        role: Role.FIELD_OFFICER,
+        campId: currentCampId,
+        isActive: true
+      });
+
+      setToast({ message: 'تم إضافة الموظف بنجاح. كلمة المرور المؤقتة: ' + password, type: 'success' });
+      setShowForm(false);
+      setFormData({
+        email: '',
+        firstName: '',
+        lastName: '',
+        phoneNumber: '',
+        password: '',
+        isActive: true
+      });
+      loadStaff();
+    } catch (err: any) {
+      console.error('Error adding staff:', err);
+      setToast({ message: 'فشل إضافة الموظف: ' + err.message, type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteStaff = async () => {
+    if (!staffToDelete) return;
+
+    if (!window.confirm('هل أنت متأكد من حذف هذا الموظف؟')) {
+      return;
+    }
+
+    try {
+      await realDataService.deleteUser(staffToDelete);
+      setToast({ message: 'تم حذف الموظف بنجاح', type: 'success' });
+      setShowDeleteConfirm(false);
+      setStaffToDelete(null);
+      loadStaff();
+    } catch (err: any) {
+      console.error('Error deleting staff:', err);
+      setToast({ message: 'فشل حذف الموظف', type: 'error' });
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!staffToResetPassword) return;
+
+    try {
+      const newPassword = generatePassword();
+      setGeneratedPassword(newPassword);
+
+      await realDataService.resetUserPassword(staffToResetPassword, newPassword);
+      setToast({ 
+        message: 'تم إعادة تعيين كلمة المرور. الكلمة الجديدة: ' + newPassword, 
+        type: 'success' 
+      });
+      setShowResetPasswordConfirm(false);
+      setStaffToResetPassword(null);
+    } catch (err: any) {
+      console.error('Error resetting password:', err);
+      setToast({ message: 'فشل إعادة تعيين كلمة المرور', type: 'error' });
+    }
+  };
+
+  const filteredStaff = staff.filter(member => {
+    const matchesSearch = searchTerm === '' || 
+      `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'active' && member.isActive) ||
+      (filterStatus === 'inactive' && !member.isActive);
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalPages = Math.ceil(filteredStaff.length / itemsPerPage);
+  const paginatedStaff = filteredStaff.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-bold">جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-[2rem] border-2 border-gray-100 shadow-sm p-6 mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                إدارة الموظفين
+              </h1>
+              <p className="text-gray-500 text-sm font-bold mt-1 mr-12">إدارة موظفي الميدان في المخيم</p>
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:shadow-xl transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              إضافة موظف
+            </button>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="md:col-span-1">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="بحث بالاسم أو البريد..."
+                  className="w-full pl-4 pr-10 py-3 rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all font-bold text-sm"
+                />
+                <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <div>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all font-bold text-sm bg-white"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="active">نشط</option>
+                <option value="inactive">غير نشط</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterStatus('all');
+                }}
+                className="px-4 py-3 text-gray-600 font-bold text-sm hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                إعادة تعيين
+              </button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t">
+            <div className="bg-emerald-50 rounded-2xl p-4 text-center">
+              <p className="text-3xl font-black text-emerald-600">{staff.length}</p>
+              <p className="text-xs font-bold text-emerald-700 mt-1">إجمالي الموظفين</p>
+            </div>
+            <div className="bg-blue-50 rounded-2xl p-4 text-center">
+              <p className="text-3xl font-black text-blue-600">{staff.filter(s => s.isActive).length}</p>
+              <p className="text-xs font-bold text-blue-700 mt-1">نشطون</p>
+            </div>
+            <div className="bg-amber-50 rounded-2xl p-4 text-center">
+              <p className="text-3xl font-black text-amber-600">{staff.filter(s => !s.isActive).length}</p>
+              <p className="text-xs font-bold text-amber-700 mt-1">غير نشطين</p>
+            </div>
+            <div className="bg-purple-50 rounded-2xl p-4 text-center">
+              <p className="text-3xl font-black text-purple-600">
+                {staff.filter(s => {
+                  const today = new Date().toDateString();
+                  return s.lastLogin && new Date(s.lastLogin).toDateString() === today;
+                }).length}
+              </p>
+              <p className="text-xs font-bold text-purple-700 mt-1">دخلوا اليوم</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Staff List */}
+        <div className="bg-white rounded-[2rem] border-2 border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b-2 border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-right text-xs font-black text-gray-500 uppercase tracking-wider">الموظف</th>
+                  <th className="px-6 py-4 text-right text-xs font-black text-gray-500 uppercase tracking-wider">البريد الإلكتروني</th>
+                  <th className="px-6 py-4 text-right text-xs font-black text-gray-500 uppercase tracking-wider">الهاتف</th>
+                  <th className="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-wider">الحالة</th>
+                  <th className="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-wider">آخر دخول</th>
+                  <th className="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-wider">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {paginatedStaff.length > 0 ? paginatedStaff.map((member) => (
+                  <tr key={member.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center text-blue-700 font-black">
+                          {member.firstName?.charAt(0)}{member.lastName?.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-black text-gray-800 text-sm">
+                            {member.firstName} {member.lastName}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-gray-700 text-sm">{member.email}</p>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <p className="font-bold text-gray-700 text-sm dir-ltr text-right">
+                        {member.phoneNumber || '-'}
+                      </p>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs border-2 ${
+                        member.isActive 
+                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                          : 'bg-gray-100 text-gray-700 border-gray-200'
+                      }`}>
+                        {member.isActive ? 'نشط' : 'غير نشط'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <p className="text-sm font-bold text-gray-600">
+                        {member.lastLogin ? new Date(member.lastLogin).toLocaleDateString('ar-EG', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : 'لم يسبق الدخول'}
+                      </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setStaffToResetPassword(member.id);
+                            setShowResetPasswordConfirm(true);
+                          }}
+                          className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg font-bold text-xs hover:bg-amber-200 transition-all"
+                        >
+                          إعادة كلمة المرور
+                        </button>
+                        <button
+                          onClick={() => {
+                            setStaffToDelete(member.id);
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg font-bold text-xs hover:bg-red-200 transition-all"
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500 font-bold">لا توجد موظفين</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-gray-600">
+                عرض {Math.min((currentPage - 1) * itemsPerPage + 1, filteredStaff.length)} إلى {Math.min(currentPage * itemsPerPage, filteredStaff.length)} من {filteredStaff.length} موظف
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-all"
+                >
+                  السابق
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-all"
+                >
+                  التالي
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Staff Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-gray-800">إضافة موظف جديد</h2>
+              <button
+                onClick={() => setShowForm(false)}
+                className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center hover:bg-gray-200 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">الاسم الأول</label>
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">اسم العائلة</label>
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2 uppercase">البريد الإلكتروني</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2 uppercase">رقم الهاتف</label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div className="p-4 bg-amber-50 rounded-2xl border-2 border-amber-100">
+                <p className="text-xs font-black text-amber-800 mb-1">⚠️ ملاحظة مهمة</p>
+                <p className="text-xs text-amber-700 font-bold">
+                  سيتم إنشاء كلمة مرور تلقائياً عند إضافة الموظف.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowForm(false)}
+                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-black hover:bg-gray-200 transition-all"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleAddStaff}
+                  disabled={saving}
+                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 transition-all disabled:opacity-50"
+                >
+                  {saving ? 'جاري الإضافة...' : 'إضافة'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {showDeleteConfirm && staffToDelete && (
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDeleteStaff}
+          title="تأكيد الحذف"
+          message="هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن هذا الإجراء."
+          confirmText="نعم، حذف"
+          cancelText="إلغاء"
+          type="danger"
+          isLoading={false}
+        />
+      )}
+
+      {/* Reset Password Confirm Modal */}
+      {showResetPasswordConfirm && staffToResetPassword && (
+        <ConfirmModal
+          isOpen={showResetPasswordConfirm}
+          onClose={() => setShowResetPasswordConfirm(false)}
+          onConfirm={handleResetPassword}
+          title="إعادة تعيين كلمة المرور"
+          message={
+            <div className="space-y-3">
+              <p className="font-bold text-gray-700">
+                هل أنت متأكد من إعادة تعيين كلمة المرور لهذا الموظف؟
+              </p>
+              <p className="text-sm text-amber-600 font-bold">
+                سيتم إنشاء كلمة مرور جديدة ويجب تزويد الموظف بها.
+              </p>
+            </div>
+          }
+          confirmText="نعم، إعادة تعيين"
+          cancelText="إلغاء"
+          type="warning"
+          isLoading={false}
+        />
+      )}
+    </div>
+  );
+};
+
+export default StaffManagement;

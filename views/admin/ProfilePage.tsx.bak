@@ -1,0 +1,431 @@
+import React, { useState, useEffect } from 'react';
+import { getCurrentUser, removeAuthToken } from '../../utils/authUtils';
+import { realDataService } from '../../services/realDataServiceBackend';
+import { makeAuthenticatedRequest } from '../../utils/apiUtils';
+import { useNavigate } from 'react-router-dom';
+import Toast from '../../components/Toast';
+import ConfirmModal from '../../components/ConfirmModal';
+
+interface User {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  role: string;
+  camp_id?: string;
+  camp_name?: string;
+  is_active: boolean;
+  created_at: string;
+  last_login?: string;
+}
+
+const ProfilePage = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    phoneNumber: ''
+  });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const currentUser = getCurrentUser();
+      if (!currentUser || !currentUser.id) {
+        return;
+      }
+
+      const currentUserData = await makeAuthenticatedRequest('/users/profile');
+      if (currentUserData) {
+        setUser(currentUserData);
+        setFormData({
+          firstName: currentUserData.first_name || '',
+          lastName: currentUserData.last_name || '',
+          phoneNumber: currentUserData.phone_number || ''
+        });
+
+        if (!currentUserData.last_login) {
+          makeAuthenticatedRequest('/auth/update-last-login', {
+            method: 'POST',
+            body: JSON.stringify({ userId: currentUserData.id })
+          }).then(() => {
+            setUser(prev => prev ? { ...prev, last_login: new Date().toISOString() } : null);
+          }).catch(console.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      setToast({ message: 'فشل تحميل الملف الشخصي', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await makeAuthenticatedRequest('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone_number: formData.phoneNumber
+        })
+      });
+
+      setToast({ message: 'تم حفظ التغييرات بنجاح', type: 'success' });
+      setIsEditing(false);
+      loadProfile();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      setToast({ message: 'فشل حفظ التغييرات', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setToast({ message: 'كلمتا المرور غير متطابقتين', type: 'error' });
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setToast({ message: 'يجب أن تكون كلمة المرور 6 أحرف على الأقل', type: 'error' });
+      return;
+    }
+
+    try {
+      await makeAuthenticatedRequest('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword
+        })
+      });
+
+      setToast({ message: 'تم تغيير كلمة المرور بنجاح', type: 'success' });
+      setShowPasswordModal(false);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      setToast({ message: 'فشل تغيير كلمة المرور', type: 'error' });
+    }
+  };
+
+  const handleLogout = () => {
+    removeAuthToken();
+    navigate('/login');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-bold">جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-[2rem] border-2 border-gray-100 shadow-sm p-6 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-gray-800">الملف الشخصي</h1>
+              <p className="text-gray-500 text-sm font-bold mt-1">إدارة معلومات حسابك الشخصي</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 mb-6 p-6 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl">
+            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center text-3xl font-black text-emerald-600 shadow-md">
+              {user?.first_name?.charAt(0)}{user?.last_name?.charAt(0)}
+            </div>
+            <div className="flex-1">
+              <h2 className="text-2xl font-black text-gray-800">{user?.first_name} {user?.last_name}</h2>
+              <p className="text-gray-600 font-bold text-sm mt-1">{user?.email}</p>
+              <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-black ${
+                user?.role === 'SYSTEM_ADMIN' ? 'bg-red-100 text-red-700' :
+                user?.role === 'CAMP_MANAGER' ? 'bg-blue-100 text-blue-700' :
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {user?.role === 'SYSTEM_ADMIN' ? 'مدير النظام' :
+                 user?.role === 'CAMP_MANAGER' ? 'مدير المخيم' :
+                 'موظف ميدان'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-black text-gray-800 mb-4">المعلومات الشخصية</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">الاسم الأول</label>
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    disabled={!isEditing}
+                    className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm disabled:bg-gray-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">اسم العائلة</label>
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    disabled={!isEditing}
+                    className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm disabled:bg-gray-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">رقم الهاتف</label>
+                  <input
+                    type="tel"
+                    value={formData.phoneNumber}
+                    onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                    disabled={!isEditing}
+                    className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm disabled:bg-gray-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-700 mb-2 uppercase">الحالة</label>
+                  <div className="p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl">
+                    <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs border-2 ${
+                      user?.is_active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-700 border-gray-200'
+                    }`}>
+                      {user?.is_active ? 'نشط' : 'غير نشط'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {isEditing && (
+                <div className="flex gap-3 mt-6 pt-6 border-t">
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-black hover:bg-gray-200 transition-all"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 transition-all disabled:opacity-50"
+                  >
+                    {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 border-t">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-gray-800">الأمان</h3>
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="text-sm font-black text-emerald-600 hover:text-emerald-700"
+                >
+                  تغيير كلمة المرور
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-4 bg-gray-50 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center">
+                      <span className="text-xl">🔑</span>
+                    </div>
+                    <div>
+                      <p className="font-black text-gray-800 text-sm">كلمة المرور</p>
+                      <p className="text-xs text-gray-500 font-bold">آخر تغيير منذ أكثر من 30 يوم</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPasswordModal(true)}
+                    className="px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm hover:border-emerald-500 hover:text-emerald-600 transition-all"
+                  >
+                    تغيير
+                  </button>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center">
+                      <span className="text-xl">📱</span>
+                    </div>
+                    <div>
+                      <p className="font-black text-gray-800 text-sm">التحقق بخطوتين</p>
+                      <p className="text-xs text-gray-500 font-bold">غير مفعّل</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setToast({ message: 'قريباً', type: 'info' })}
+                    className="px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm hover:border-emerald-500 hover:text-emerald-600 transition-all"
+                  >
+                    تفعيل
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t">
+              <div className="p-6 bg-red-50 rounded-2xl border-2 border-red-100">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-black text-red-800 text-lg mb-2">منطقة الخطر</h3>
+                    <p className="text-sm text-red-600 font-bold mb-4">
+                      هل أنت متأكد من أنك تريد تسجيل الخروج؟
+                    </p>
+                    <button
+                      onClick={() => setShowLogoutConfirm(true)}
+                      className="px-6 py-3 bg-red-600 text-white rounded-xl font-black hover:bg-red-700 transition-all"
+                    >
+                      تسجيل الخروج
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-gray-800">تغيير كلمة المرور</h2>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                }}
+                className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center hover:bg-gray-200 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2 uppercase">كلمة المرور الحالية</label>
+                <input
+                  type="password"
+                  value={passwordData.currentPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2 uppercase">كلمة المرور الجديدة</label>
+                <input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2 uppercase">تأكيد كلمة المرور</label>
+                <input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-emerald-500 focus:outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                  }}
+                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-black hover:bg-gray-200 transition-all"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleChangePassword}
+                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 transition-all"
+                >
+                  تغيير
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <ConfirmModal
+          isOpen={showLogoutConfirm}
+          onClose={() => setShowLogoutConfirm(false)}
+          onConfirm={handleLogout}
+          title="تسجيل الخروج"
+          message="هل أنت متأكد من أنك تريد تسجيل الخروج؟"
+          confirmText="نعم، خروج"
+          cancelText="إلغاء"
+          type="danger"
+          isLoading={false}
+        />
+      )}
+    </div>
+  );
+};
+
+export default ProfilePage;

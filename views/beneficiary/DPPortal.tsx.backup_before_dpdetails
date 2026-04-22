@@ -1,0 +1,1490 @@
+// views/beneficiary/DPPortal.tsx
+// Beneficiary DP Details Portal - Read-only with Request-based Actions
+// Features: Emergency Reports, Update Requests, Complaints
+// Styled to match Campaign Manager pages pattern
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { beneficiaryService } from '../../services/beneficiaryService';
+import { sessionService } from '../../services/sessionService';
+import Toast from '../../components/Toast';
+import { GAZA_LOCATIONS, getAreasByGovernorate } from '../../constants/gazaLocations';
+import type { DPProfile, FamilyMember } from '../../types';
+
+// Import forms
+import EmergencyReportForm from './forms/EmergencyReportForm';
+import UpdateRequestForm from './forms/UpdateRequestForm';
+import ComplaintForm from './forms/ComplaintForm';
+
+interface DPProfileExtended extends Omit<DPProfile, 'currentHousingDetailedType'> {
+  // Flat fields for direct binding
+  originalAddressGovernorate?: string;
+  originalAddressRegion?: string;
+  originalAddressDetails?: string;
+  originalAddressHousingType?: string;
+  currentHousingType?: string;
+  currentHousingIsSuitable?: boolean;
+  currentHousingSanitaryFacilities?: string;
+  currentHousingWaterSource?: string;
+  currentHousingElectricityAccess?: string;
+  currentHousingGovernorate?: string;
+  currentHousingRegion?: string;
+  currentHousingLandmark?: string;
+  currentHousingSharingStatus?: string;
+  currentHousingDetailedType?: string; // Override with string for flexibility
+  currentHousingFurnished?: boolean;
+}
+
+interface EmergencyReport {
+  id: string;
+  familyId: string;
+  emergencyType: string;
+  description: string;
+  urgency: 'عاجل جداً' | 'عاجل' | 'عادي';
+  location?: string;
+  status: string;
+  assignedTo?: string;
+  resolvedAt?: string;
+  resolutionNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UpdateRequest {
+  id: string;
+  familyId: string;
+  fieldName: string;
+  oldValue?: string;
+  newValue: string;
+  reason: string;
+  status: 'قيد الانتظار' | 'قيد المراجعة' | 'موافق' | 'مرفوض' | 'تم التطبيق';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  appliedAt?: string;
+  createdAt: string;
+}
+
+interface Complaint {
+  id: string;
+  familyId: string;
+  subject: string;
+  description: string;
+  category: string;
+  isAnonymous: boolean;
+  status: 'جديد' | 'قيد المراجعة' | 'تم الحل' | 'مرفوض';
+  response?: string;
+  respondedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const MARITAL_STATUS: Record<string, { label: string; color: string }> = {
+  'أعزب': { label: 'أعزب', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  'متزوج': { label: 'متزوج', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  'مطلق': { label: 'مطلق', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  'أرمل': { label: 'أرمل', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+  'أسرة هشة': { label: 'أسرة هشة', color: 'bg-purple-50 text-purple-700 border-purple-200' }
+};
+
+const VULNERABILITY_LEVELS: Record<string, { label: string; color: string }> = {
+  'عالي جداً': { label: 'عالي جداً', color: 'bg-red-50 text-red-700 border-red-200' },
+  'عالي': { label: 'عالي', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  'متوسط': { label: 'متوسط', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  'منخفض': { label: 'منخفض', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  'جديد': 'bg-blue-50 text-blue-700 border-blue-200',
+  'قيد الانتظار': 'bg-amber-50 text-amber-700 border-amber-200',
+  'قيد المراجعة': 'bg-purple-50 text-purple-700 border-purple-200',
+  'موافق': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'تم الحل': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'تم التطبيق': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'مرفوض': 'bg-red-50 text-red-700 border-red-200',
+  'ملغى': 'bg-gray-50 text-gray-700 border-gray-200'
+};
+
+interface DPPortalProps {
+  profileId: string;
+  onLogout: () => void;
+}
+
+const DPPortal: React.FC<DPPortalProps> = ({ profileId, onLogout }) => {
+  const navigate = useNavigate();
+  const [dp, setDp] = useState<DPProfileExtended | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [activeTab, setActiveTab] = useState<'basic' | 'family' | 'housing' | 'health' | 'spouse' | 'documents' | 'emergency' | 'updates' | 'complaints'>('basic');
+
+  // Data states
+  const [emergencyReports, setEmergencyReports] = useState<EmergencyReport[]>([]);
+  const [updateRequests, setUpdateRequests] = useState<UpdateRequest[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+
+  // Modal states
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+
+  // Track loaded tabs to prevent re-fetching
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    
+    // Get familyId from current user token
+    const currentUser = sessionService.getCurrentUser();
+    console.log('[DPPortal] Current user:', currentUser);
+    
+    if (!currentUser?.familyId) {
+      console.error('[DPPortal] No familyId found in user token');
+      setToast({ 
+        message: 'لم يتم العثور على معرف العائلة. يرجى تسجيل الدخول مرة أخرى.', 
+        type: 'error' 
+      });
+      setLoading(false);
+      return;
+    }
+    
+    // Use familyId from token instead of profileId prop
+    const actualFamilyId = currentUser.familyId;
+    console.log('[DPPortal] Using familyId:', actualFamilyId);
+    
+    loadData(actualFamilyId);
+  }, []);
+
+  // Load tab-specific data when active tab changes
+  useEffect(() => {
+    if (activeTab !== 'basic' && activeTab !== 'family' && activeTab !== 'housing' && activeTab !== 'health' && activeTab !== 'spouse' && activeTab !== 'documents') {
+      loadTabData(activeTab);
+    }
+  }, [activeTab]);
+
+  const loadData = async (familyId: string) => {
+    setLoading(true);
+    try {
+      console.log('[DPPortal] Loading data for familyId:', familyId);
+      
+      // Load profile and family members in parallel
+      const [profileData, membersData] = await Promise.all([
+        beneficiaryService.getFamilyProfile(familyId),
+        beneficiaryService.getFamilyMembers(familyId)
+      ]);
+
+      console.log('[DPPortal] Profile data loaded:', profileData);
+
+      // Transform snake_case to camelCase and nested objects to flat fields
+      const flatData: DPProfileExtended = {
+        ...profileData,
+        // Basic fields from snake_case
+        headOfFamily: (profileData as any).head_of_family_name || profileData.headOfFamily,
+        nationalId: (profileData as any).head_of_family_national_id || profileData.nationalId,
+        gender: (profileData as any).head_of_family_gender || profileData.gender,
+        dateOfBirth: (profileData as any).head_of_family_date_of_birth || profileData.dateOfBirth,
+        age: (profileData as any).head_of_family_age || profileData.age,
+        maritalStatus: (profileData as any).head_of_family_marital_status || profileData.maritalStatus,
+        widowReason: (profileData as any).head_of_family_widow_reason || profileData.widowReason,
+        headRole: (profileData as any).head_of_family_role || profileData.headRole,
+        phoneNumber: (profileData as any).head_of_family_phone_number || profileData.phoneNumber,
+        phoneSecondary: (profileData as any).head_of_family_phone_secondary || profileData.phoneSecondary,
+        totalMembersCount: (profileData as any).total_members_count || profileData.totalMembersCount,
+        maleCount: (profileData as any).male_count || profileData.maleCount,
+        femaleCount: (profileData as any).female_count || profileData.femaleCount,
+        childCount: (profileData as any).child_count || profileData.childCount,
+        teenagerCount: (profileData as any).teenager_count || profileData.teenagerCount,
+        adultCount: (profileData as any).adult_count || profileData.adultCount,
+        seniorCount: (profileData as any).senior_count || profileData.seniorCount,
+        disabledCount: (profileData as any).disabled_count || profileData.disabledCount,
+        injuredCount: (profileData as any).injured_count || profileData.injuredCount,
+        pregnantWomenCount: (profileData as any).pregnant_women_count || profileData.pregnantWomenCount,
+        vulnerabilityScore: (profileData as any).vulnerability_score || profileData.vulnerabilityScore,
+        vulnerabilityPriority: (profileData as any).vulnerability_priority || profileData.vulnerabilityPriority,
+        registrationStatus: (profileData as any).status || profileData.registrationStatus,
+        // Wife fields
+        wifeName: (profileData as any).wife_name || profileData.wifeName,
+        wifeNationalId: (profileData as any).wife_national_id || profileData.wifeNationalId,
+        wifeDateOfBirth: (profileData as any).wife_date_of_birth || profileData.wifeDateOfBirth,
+        wifeAge: (profileData as any).wife_age || profileData.wifeAge,
+        wifeIsPregnant: (profileData as any).wife_is_pregnant || profileData.wifeIsPregnant,
+        wifePregnancyMonth: (profileData as any).wife_pregnancy_month || profileData.wifePregnancyMonth,
+        wifePregnancySpecialNeeds: (profileData as any).wife_pregnancy_special_needs || profileData.wifePregnancySpecialNeeds,
+        wifeIsWorking: (profileData as any).wife_is_working || profileData.wifeIsWorking,
+        wifeOccupation: (profileData as any).wife_occupation || profileData.wifeOccupation,
+        wifeDisabilityType: (profileData as any).wife_disability_type || profileData.wifeDisabilityType,
+        wifeChronicDiseaseType: (profileData as any).wife_chronic_disease_type || profileData.wifeChronicDiseaseType,
+        wifeWarInjuryType: (profileData as any).wife_war_injury_type || profileData.wifeWarInjuryType,
+        // Housing fields
+        originalAddressGovernorate: (profileData as any).original_address_governorate || profileData.originalAddress?.governorate,
+        originalAddressRegion: (profileData as any).original_address_region || profileData.originalAddress?.region,
+        originalAddressDetails: (profileData as any).original_address_details || profileData.originalAddress?.details,
+        originalAddressHousingType: (profileData as any).original_address_housing_type || profileData.originalAddress?.housingType,
+        currentHousingType: (profileData as any).current_housing_type || profileData.currentHousing?.type,
+        currentHousingIsSuitable: (profileData as any).current_housing_is_suitable_for_family_size || profileData.currentHousing?.isSuitableForFamilySize,
+        currentHousingSanitaryFacilities: (profileData as any).current_housing_sanitary_facilities || profileData.currentHousing?.sanitaryFacilities,
+        currentHousingWaterSource: (profileData as any).current_housing_water_source || profileData.currentHousing?.waterSource,
+        currentHousingElectricityAccess: (profileData as any).current_housing_electricity_access || profileData.currentHousing?.electricityAccess,
+        currentHousingGovernorate: (profileData as any).current_housing_governorate || profileData.currentHousing?.governorate,
+        currentHousingRegion: (profileData as any).current_housing_region || profileData.currentHousing?.region,
+        currentHousingLandmark: (profileData as any).current_housing_landmark || profileData.currentHousing?.landmark,
+        currentHousingSharingStatus: (profileData as any).current_housing_sharing_status || profileData.currentHousing?.sharingStatus,
+        currentHousingDetailedType: (profileData as any).current_housing_detailed_type || profileData.currentHousing?.detailedType,
+        currentHousingFurnished: (profileData as any).current_housing_furnished || profileData.currentHousing?.furnished,
+        unitNumber: (profileData as any).current_housing_unit_number || profileData.unitNumber,
+        // 4-part name structure
+        headFirstName: (profileData as any).head_first_name || profileData.headFirstName,
+        headFatherName: (profileData as any).head_father_name || profileData.headFatherName,
+        headGrandfatherName: (profileData as any).head_grandfather_name || profileData.headGrandfatherName,
+        headFamilyName: (profileData as any).head_family_name || profileData.headFamilyName
+      };
+
+      console.log('[DPPortal] Transformed flatData:', flatData);
+      setDp(flatData);
+      setFamilyMembers(membersData);
+      setLoadedTabs(prev => new Set(prev).add('basic'));
+    } catch (err: any) {
+      console.error('[DPPortal] Error loading data:', err);
+      console.error('[DPPortal] Error details:', err.message);
+      console.error('[DPPortal] Full error:', JSON.stringify(err, null, 2));
+      setToast({ message: err.message || 'فشل تحميل البيانات. يرجى المحاولة مرة أخرى.', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDP = async () => {
+    try {
+      const profileData = await beneficiaryService.getFamilyProfile(profileId);
+
+      // Transform nested objects to flat fields for backward compatibility
+      const flatData: DPProfileExtended = {
+        ...profileData,
+        originalAddressGovernorate: (profileData as any).original_address_governorate || profileData.originalAddress?.governorate,
+        originalAddressRegion: (profileData as any).original_address_region || profileData.originalAddress?.region,
+        originalAddressDetails: (profileData as any).original_address_details || profileData.originalAddress?.details,
+        originalAddressHousingType: (profileData as any).original_address_housing_type || profileData.originalAddress?.housingType,
+        currentHousingType: (profileData as any).current_housing_type || profileData.currentHousing?.type,
+        currentHousingIsSuitable: (profileData as any).current_housing_is_suitable_for_family_size || profileData.currentHousing?.isSuitableForFamilySize,
+        currentHousingSanitaryFacilities: (profileData as any).current_housing_sanitary_facilities || profileData.currentHousing?.sanitaryFacilities,
+        currentHousingWaterSource: (profileData as any).current_housing_water_source || profileData.currentHousing?.waterSource,
+        currentHousingElectricityAccess: (profileData as any).current_housing_electricity_access || profileData.currentHousing?.electricityAccess,
+        currentHousingGovernorate: (profileData as any).current_housing_governorate || profileData.currentHousing?.governorate,
+        currentHousingRegion: (profileData as any).current_housing_region || profileData.currentHousing?.region,
+        currentHousingLandmark: (profileData as any).current_housing_landmark || profileData.currentHousing?.landmark,
+        currentHousingSharingStatus: (profileData as any).current_housing_sharing_status || profileData.currentHousing?.sharingStatus,
+        currentHousingDetailedType: (profileData as any).current_housing_detailed_type || profileData.currentHousing?.detailedType,
+        currentHousingFurnished: (profileData as any).current_housing_furnished || profileData.currentHousing?.furnished
+      };
+
+      setDp(flatData);
+    } catch (err: any) {
+      console.error('[DPPortal] Error loading DP:', err);
+      setToast({ message: err.message || 'فشل تحميل بيانات العائلة', type: 'error' });
+    }
+  };
+
+  const loadFamilyMembers = async () => {
+    try {
+      const members = await beneficiaryService.getFamilyMembers(profileId);
+      setFamilyMembers(members);
+    } catch (err: any) {
+      console.error('[DPPortal] Error loading family members:', err);
+      setFamilyMembers([]);
+    }
+  };
+
+  const loadTabData = async (tab: string) => {
+    if (loadedTabs.has(tab)) return;
+
+    // Get familyId from token
+    const currentUser = sessionService.getCurrentUser();
+    const familyId = currentUser?.familyId || profileId;
+
+    // Set loading state for this tab
+    setTabLoadingStates(prev => ({ ...prev, [tab]: true }));
+
+    try {
+      console.log(`[DPPortal] Loading data for tab: ${tab}, familyId: ${familyId}`);
+      
+      switch (tab) {
+        case 'emergency':
+          const emergencyData = await beneficiaryService.getEmergencyReports(familyId);
+          console.log(`[DPPortal] Loaded ${emergencyData.length} emergency reports`);
+          setEmergencyReports(emergencyData);
+          break;
+        case 'updates':
+          const updatesData = await beneficiaryService.getUpdateRequests(familyId);
+          console.log(`[DPPortal] Loaded ${updatesData.length} update requests`);
+          setUpdateRequests(updatesData);
+          break;
+        case 'complaints':
+          const complaintsData = await beneficiaryService.getComplaints(familyId);
+          console.log(`[DPPortal] Loaded ${complaintsData.length} complaints`);
+          setComplaints(complaintsData);
+          break;
+      }
+      setLoadedTabs(prev => new Set(prev).add(tab));
+    } catch (err: any) {
+      console.error(`[DPPortal] Error loading ${tab} data:`, err);
+      console.error(`[DPPortal] Error details:`, err.message);
+      console.error(`[DPPortal] User context:`, {
+        profileId,
+        familyId,
+        currentUser: sessionService.getCurrentUser()
+      });
+      setToast({ 
+        message: `فشل تحميل بيانات ${tab}. يرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى.`, 
+        type: 'error' 
+      });
+    } finally {
+      // Clear loading state for this tab
+      setTabLoadingStates(prev => ({ ...prev, [tab]: false }));
+    }
+  };
+
+  const getFullName = (profile: DPProfileExtended | null): string => {
+    if (!profile) return 'مستفيد';
+    if (profile.headFirstName && profile.headFatherName && profile.headGrandfatherName && profile.headFamilyName) {
+      return `${profile.headFirstName} ${profile.headFatherName} ${profile.headGrandfatherName} ${profile.headFamilyName}`;
+    }
+    return profile.headOfFamily || 'مستفيد';
+  };
+
+  // Tab loading states
+  const [tabLoadingStates, setTabLoadingStates] = useState<Record<string, boolean>>({
+    emergency: false,
+    updates: false,
+    complaints: false
+  });
+
+  const tabs = [
+    { id: 'basic' as const, label: 'البيانات الأساسية', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    )},
+    { id: 'family' as const, label: 'أفراد الأسرة', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    )},
+    { id: 'housing' as const, label: 'السكن', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    )},
+    { id: 'health' as const, label: 'الصحة', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+    )},
+    { id: 'spouse' as const, label: 'الزوج/الزوجة', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    )},
+    { id: 'documents' as const, label: 'المستندات', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    )},
+    { id: 'emergency' as const, label: 'البلاغات الطارئة', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+    )},
+    { id: 'updates' as const, label: 'طلبات التحديث', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    )},
+    { id: 'complaints' as const, label: 'الشكاوى', icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+      </svg>
+    )}
+  ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 flex items-center justify-center" dir="rtl">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700 font-bold text-lg">جاري تحميل البيانات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50" dir="rtl">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 left-4 right-4 z-50 md:left-auto md:right-4 md:w-96">
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-lg border-b border-emerald-100 sticky top-0 z-40 shadow-sm">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 text-gray-600 hover:bg-emerald-50 rounded-xl transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-emerald-200">
+                س
+              </div>
+              <div>
+                <h1 className="font-black text-gray-800 text-lg">سند</h1>
+                <p className="text-xs text-emerald-600 font-bold">بوابة النازحين</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="hidden md:block text-left">
+              <div className="text-sm font-black text-gray-800">{getFullName(dp)}</div>
+              <div className="text-xs text-emerald-600 font-bold">نازح</div>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-full flex items-center justify-center text-emerald-700 font-black border-2 border-emerald-300">
+              {getFullName(dp).charAt(0) || 'م'}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="px-4 pb-3 overflow-x-auto">
+          <div className="flex gap-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-2xl font-bold text-sm whitespace-nowrap transition-all duration-300 ${
+                  activeTab === tab.id
+                    ? 'bg-gradient-to-l from-emerald-600 via-emerald-700 to-emerald-800 text-white shadow-lg shadow-emerald-200 scale-105'
+                    : 'bg-white text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 border border-gray-100'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="p-4 md:p-6 lg:p-8 space-y-6 animate-in fade-in duration-500">
+        {activeTab === 'basic' && dp && (
+          <BasicInfoTab dp={dp} getFullName={getFullName} />
+        )}
+
+        {activeTab === 'family' && (
+          <FamilyTab familyMembers={familyMembers} />
+        )}
+
+        {activeTab === 'housing' && dp && (
+          <HousingTab dp={dp} />
+        )}
+
+        {activeTab === 'health' && dp && (
+          <HealthTab dp={dp} familyMembers={familyMembers} />
+        )}
+
+        {activeTab === 'spouse' && dp && (
+          <SpouseTab dp={dp} />
+        )}
+
+        {activeTab === 'documents' && dp && (
+          <DocumentsTab dp={dp} />
+        )}
+
+        {activeTab === 'emergency' && (
+          <EmergencyTab
+            emergencyReports={emergencyReports}
+            loading={tabLoadingStates.emergency}
+            onRefresh={() => loadTabData('emergency')}
+            onNewReport={() => setShowEmergencyModal(true)}
+          />
+        )}
+
+        {activeTab === 'updates' && (
+          <UpdatesTab
+            updateRequests={updateRequests}
+            loading={tabLoadingStates.updates}
+            onRefresh={() => loadTabData('updates')}
+            onNewRequest={() => setShowUpdateModal(true)}
+          />
+        )}
+
+        {activeTab === 'complaints' && (
+          <ComplaintsTab
+            complaints={complaints}
+            loading={tabLoadingStates.complaints}
+            onRefresh={() => loadTabData('complaints')}
+            onNewComplaint={() => setShowComplaintModal(true)}
+          />
+        )}
+      </main>
+
+      {/* Modals */}
+      {showEmergencyModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                <span className="text-red-600">🚨</span>
+                تقديم بلاغ طارئ
+              </h3>
+              <button onClick={() => setShowEmergencyModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <EmergencyReportForm
+              familyId={profileId}
+              onSuccess={() => {
+                setShowEmergencyModal(false);
+                setToast({ message: 'تم إرسال البلاغ الطارئ بنجاح', type: 'success' });
+                loadTabData('emergency');
+              }}
+              onCancel={() => setShowEmergencyModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showUpdateModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                <span className="text-emerald-600">✏️</span>
+                طلب تحديث بيانات
+              </h3>
+              <button onClick={() => setShowUpdateModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <UpdateRequestForm
+              familyId={profileId}
+              onSuccess={() => {
+                setShowUpdateModal(false);
+                setToast({ message: 'تم إرسال طلب التحديث بنجاح', type: 'success' });
+                loadTabData('updates');
+              }}
+              onCancel={() => setShowUpdateModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showComplaintModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                <span className="text-emerald-600">📝</span>
+                تقديم شكوى / مقترح
+              </h3>
+              <button onClick={() => setShowComplaintModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <ComplaintForm
+              familyId={profileId}
+              onSuccess={() => {
+                setShowComplaintModal(false);
+                setToast({ message: 'تم إرسال الشكوى بنجاح', type: 'success' });
+                loadTabData('complaints');
+              }}
+              onCancel={() => setShowComplaintModal(false)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============ TAB COMPONENTS ============
+
+// Basic Info Tab
+const BasicInfoTab = ({ dp, getFullName }: { dp: DPProfileExtended; getFullName: (dp: DPProfileExtended | null) => string }) => {
+  return (
+    <div className="space-y-6">
+      {/* Hero Profile Card */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 p-6 md:p-8 text-white shadow-2xl shadow-emerald-200">
+        <div className="absolute top-0 left-0 w-full h-full opacity-10">
+          <div className="absolute top-10 left-10 w-32 h-32 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-10 right-10 w-40 h-40 bg-white rounded-full blur-3xl"></div>
+        </div>
+
+        <div className="relative z-10">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-emerald-100 text-sm font-bold mb-2">الملف الشخصي</p>
+              <h2 className="text-2xl md:text-3xl font-black mb-2">{getFullName(dp)}</h2>
+              <p className="text-emerald-100 text-sm font-bold">رقم الهوية: {dp.nationalId}</p>
+            </div>
+            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${dp.registrationStatus ? STATUS_COLORS[dp.registrationStatus] : STATUS_COLORS['قيد الانتظار']}`}>
+              {dp.registrationStatus || 'قيد الانتظار'}
+            </span>
+            <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${dp.vulnerabilityPriority ? VULNERABILITY_LEVELS[dp.vulnerabilityPriority]?.color : ''}`}>
+              {dp.vulnerabilityPriority || 'غير محدد'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span className="text-emerald-100 text-xs font-bold">عدد الأفراد</span>
+              </div>
+              <div className="text-3xl font-black">{dp.totalMembersCount || 0}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+              <div className="text-emerald-100 text-xs font-bold mb-1">ذكور</div>
+              <div className="text-3xl font-black">{dp.maleCount || 0}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+              <div className="text-emerald-100 text-xs font-bold mb-1">إناث</div>
+              <div className="text-3xl font-black">{dp.femaleCount || 0}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+              <div className="text-emerald-100 text-xs font-bold mb-1">درجة الهشاشة</div>
+              <div className="text-3xl font-black">{dp.vulnerabilityScore?.toFixed(0) || '0'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Personal Info */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            المعلومات الشخصية
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <InfoField label="الاسم الكامل" value={getFullName(dp)} />
+            <InfoField label="الرقم الوطني" value={dp.nationalId} dir="ltr" />
+            <InfoField label="الجنس" value={dp.gender} />
+            <InfoField label="تاريخ الميلاد" value={dp.dateOfBirth ? new Date(dp.dateOfBirth).toLocaleDateString('ar-EG') : 'غير محدد'} />
+            <InfoField label="العمر" value={`${dp.age} سنة`} />
+            <InfoField label="الحالة الاجتماعية" value={dp.maritalStatus} badge={MARITAL_STATUS[dp.maritalStatus]?.color} />
+            {dp.maritalStatus === 'أرمل' && dp.widowReason && <InfoField label="سبب الترمل" value={dp.widowReason} />}
+            <InfoField label="رقم الهاتف" value={dp.phoneNumber} dir="ltr" />
+            {dp.phoneSecondary && <InfoField label="الهاتف البديل" value={dp.phoneSecondary} dir="ltr" />}
+          </div>
+        </div>
+      </div>
+
+      {/* Family Composition */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            التركيب السكاني
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <StatBox label="ذكور" value={dp.maleCount || 0} color="blue" />
+            <StatBox label="إناث" value={dp.femaleCount || 0} color="pink" />
+            <StatBox label="أطفال" value={dp.childCount || 0} color="indigo" />
+            <StatBox label="مراهقين" value={dp.teenagerCount || 0} color="purple" />
+            <StatBox label="بالغين" value={dp.adultCount || 0} color="amber" />
+            <StatBox label="كبار سن" value={dp.seniorCount || 0} color="gray" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Family Tab
+const FamilyTab = ({ familyMembers }: { familyMembers: FamilyMember[] }) => {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            أفراد الأسرة
+          </h3>
+          <span className="text-sm font-bold text-gray-500">{familyMembers.length} فرد</span>
+        </div>
+        <div className="p-6">
+          {familyMembers.length === 0 ? (
+            <EmptyState message="لا يوجد أفراد أسرة مسجلين" />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {familyMembers.map((member) => (
+                <div key={member.id} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-xl flex items-center justify-center text-emerald-700 font-black">
+                      {member.name?.charAt(0) || 'م'}
+                    </div>
+                    <div>
+                      <div className="font-black text-gray-800">{member.name}</div>
+                      <div className="text-xs text-gray-500 font-bold">{member.relation}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">العمر:</span>
+                      <span className="font-black text-gray-800">{member.age} سنة</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">الجنس:</span>
+                      <span className={`font-black ${member.gender === 'ذكر' ? 'text-blue-600' : 'text-pink-600'}`}>{member.gender}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500 font-bold">الرقم الوطني:</span>
+                      <span className="font-black text-gray-800" dir="ltr">{member.nationalId || 'غير محدد'}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {member.isStudying && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-black">طالب</span>}
+                    {member.isWorking && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-black">يعمل</span>}
+                    {member.medicalFollowupRequired && <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-black">متابعة طبية</span>}
+                    {member.disabilityType !== 'لا يوجد' && <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-black">إعاقة</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Housing Tab
+const HousingTab = ({ dp }: { dp: DPProfileExtended }) => {
+  return (
+    <div className="space-y-6">
+      {/* Current Housing */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </div>
+            السكن الحالي
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <InfoField label="نوع السكن" value={dp.currentHousingType || 'غير محدد'} />
+            <InfoField label="المحافظة" value={dp.currentHousingGovernorate || 'غير محدد'} />
+            <InfoField label="المنطقة" value={dp.currentHousingRegion || 'غير محدد'} />
+            <InfoField label="المعلم" value={dp.currentHousingLandmark || 'غير محدد'} />
+            <InfoField label="رقم الوحدة" value={dp.unitNumber || 'غير محدد'} />
+            <InfoField label="ملائم للأسرة" value={dp.currentHousingIsSuitable ? 'نعم' : 'لا'} />
+            <InfoField label="مرافق صحية" value={dp.currentHousingSanitaryFacilities || 'غير محدد'} />
+            <InfoField label="مصدر المياه" value={dp.currentHousingWaterSource || 'غير محدد'} />
+            <InfoField label="الكهرباء" value={dp.currentHousingElectricityAccess || 'غير محدد'} />
+            {dp.currentHousingSharingStatus && <InfoField label="حالة المشاركة" value={dp.currentHousingSharingStatus} />}
+            {dp.currentHousingDetailedType && <InfoField label="النوع التفصيلي" value={dp.currentHousingDetailedType} />}
+            {dp.currentHousingFurnished !== undefined && <InfoField label="مفروش" value={dp.currentHousingFurnished ? 'نعم' : 'لا'} />}
+          </div>
+        </div>
+      </div>
+
+      {/* Original Housing */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              </svg>
+            </div>
+            السكن السابق (قبل النزوح)
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <InfoField label="المحافظة" value={dp.originalAddressGovernorate || 'غير محدد'} />
+            <InfoField label="المنطقة" value={dp.originalAddressRegion || 'غير محدد'} />
+            <InfoField label="العنوان" value={dp.originalAddressDetails || 'غير محدد'} />
+            <InfoField label="نوع السكن" value={dp.originalAddressHousingType || 'غير محدد'} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Health Tab
+const HealthTab = ({ dp, familyMembers }: { dp: DPProfileExtended; familyMembers: FamilyMember[] }) => {
+  const membersWithHealthIssues = familyMembers.filter(m =>
+    m.disabilityType !== 'لا يوجد' ||
+    m.chronicDiseaseType !== 'لا يوجد' ||
+    m.hasWarInjury ||
+    m.medicalFollowupRequired
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Head of Family Health */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </div>
+            الحالة الصحية (رب الأسرة)
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InfoField label="نوع الإعاقة" value={dp.disabilityType || 'لا يوجد'} />
+            {dp.disabilityType && dp.disabilityType !== 'لا يوجد' && (
+              <>
+                <InfoField label="درجة الإعاقة" value={dp.disabilitySeverity || 'غير محدد'} />
+                <InfoField label="تفاصيل الإعاقة" value={dp.disabilityDetails || 'غير محدد'} className="md:col-span-2" />
+              </>
+            )}
+            <InfoField label="مرض مزمن" value={dp.chronicDiseaseType || 'لا يوجد'} />
+            {dp.chronicDiseaseType && dp.chronicDiseaseType !== 'لا يوجد' && (
+              <InfoField label="تفاصيل المرض" value={dp.chronicDiseaseDetails || 'غير محدد'} className="md:col-span-2" />
+            )}
+            <InfoField label="إصابة حرب" value={dp.warInjuryType && dp.warInjuryType !== 'لا يوجد' ? 'نعم' : 'لا'} />
+            {dp.warInjuryType && dp.warInjuryType !== 'لا يوجد' && (
+              <>
+                <InfoField label="نوع الإصابة" value={dp.warInjuryType} />
+                <InfoField label="تفاصيل الإصابة" value={dp.warInjuryDetails || 'غير محدد'} className="md:col-span-2" />
+              </>
+            )}
+            <InfoField label="متابعة طبية" value={dp.medicalFollowupRequired ? 'نعم' : 'لا'} />
+            {dp.medicalFollowupRequired && (
+              <>
+                <InfoField label="التكرار" value={dp.medicalFollowupFrequency || 'غير محدد'} />
+                <InfoField label="تفاصيل" value={dp.medicalFollowupDetails || 'غير محدد'} className="md:col-span-2" />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Family Members Health */}
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            أفراد يحتاجون متابعة طبية
+          </h3>
+        </div>
+        <div className="p-6">
+          {membersWithHealthIssues.length === 0 ? (
+            <EmptyState message="لا يوجد أفراد يحتاجون متابعة طبية" />
+          ) : (
+            <div className="space-y-4">
+              {membersWithHealthIssues.map((member) => (
+                <div key={member.id} className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-black text-gray-800">{member.name}</div>
+                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full">{member.relation}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {member.disabilityType !== 'لا يوجد' && (
+                      <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-black">إعاقة: {member.disabilityType}</span>
+                    )}
+                    {member.chronicDiseaseType !== 'لا يوجد' && (
+                      <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-black">مرض مزمن: {member.chronicDiseaseType}</span>
+                    )}
+                    {member.hasWarInjury && (
+                      <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-black">إصابة حرب</span>
+                    )}
+                    {member.medicalFollowupRequired && (
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-black">متابعة طبية</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Spouse Tab
+const SpouseTab = ({ dp }: { dp: DPProfileExtended }) => {
+  const hasWife = dp.wifeName && dp.wifeName.trim() !== '';
+  const hasHusband = dp.husbandName && dp.husbandName.trim() !== '';
+
+  if (!hasWife && !hasHusband) {
+    return <EmptyState message="لا توجد بيانات زوج/زوجة مسجلة" />;
+  }
+
+  return (
+    <div className="space-y-6">
+      {hasWife && (
+        <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100">
+            <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+              <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              بيانات الزوجة
+            </h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InfoField label="الاسم" value={dp.wifeName || 'غير محدد'} />
+              <InfoField label="الرقم الوطني" value={dp.wifeNationalId || 'غير محدد'} dir="ltr" />
+              <InfoField label="تاريخ الميلاد" value={dp.wifeDateOfBirth ? new Date(dp.wifeDateOfBirth).toLocaleDateString('ar-EG') : 'غير محدد'} />
+              <InfoField label="العمر" value={dp.wifeAge ? `${dp.wifeAge} سنة` : 'غير محدد'} />
+              <InfoField label="حامل" value={dp.wifeIsPregnant ? 'نعم' : 'لا'} />
+              {dp.wifeIsPregnant && (
+                <>
+                  <InfoField label="شهر الحمل" value={`${dp.wifePregnancyMonth} أشهر`} />
+                  <InfoField label="احتياجات خاصة" value={dp.wifePregnancySpecialNeeds ? 'نعم' : 'لا'} />
+                </>
+              )}
+              <InfoField label="تعمل" value={dp.wifeIsWorking ? 'نعم' : 'لا'} />
+              {dp.wifeIsWorking && <InfoField label="المهنة" value={dp.wifeOccupation || 'غير محدد'} />}
+              <InfoField label="متابعة طبية" value={dp.wifeMedicalFollowupRequired ? 'نعم' : 'لا'} />
+              <InfoField label="إعاقة" value={dp.wifeDisabilityType && dp.wifeDisabilityType !== 'لا يوجد' ? dp.wifeDisabilityType : 'لا يوجد'} />
+              <InfoField label="مرض مزمن" value={dp.wifeChronicDiseaseType && dp.wifeChronicDiseaseType !== 'لا يوجد' ? dp.wifeChronicDiseaseType : 'لا يوجد'} />
+              <InfoField label="إصابة حرب" value={dp.wifeWarInjuryType && dp.wifeWarInjuryType !== 'لا يوجد' ? dp.wifeWarInjuryType : 'لا يوجد'} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasHusband && (
+        <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100">
+            <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              بيانات الزوج
+            </h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InfoField label="الاسم" value={dp.husbandName || 'غير محدد'} />
+              <InfoField label="الرقم الوطني" value={dp.husbandNationalId || 'غير محدد'} dir="ltr" />
+              <InfoField label="تاريخ الميلاد" value={dp.husbandDateOfBirth ? new Date(dp.husbandDateOfBirth).toLocaleDateString('ar-EG') : 'غير محدد'} />
+              <InfoField label="العمر" value={dp.husbandAge ? `${dp.husbandAge} سنة` : 'غير محدد'} />
+              <InfoField label="يعمل" value={dp.husbandIsWorking ? 'نعم' : 'لا'} />
+              {dp.husbandIsWorking && <InfoField label="المهنة" value={dp.husbandOccupation || 'غير محدد'} />}
+              <InfoField label="متابعة طبية" value={dp.husbandMedicalFollowupRequired ? 'نعم' : 'لا'} />
+              <InfoField label="إعاقة" value={dp.husbandDisabilityType || 'لا يوجد'} />
+              <InfoField label="مرض مزمن" value={dp.husbandChronicDiseaseType || 'لا يوجد'} />
+              <InfoField label="إصابة حرب" value={dp.husbandWarInjuryType || 'لا يوجد'} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Documents Tab
+const DocumentsTab = ({ dp }: { dp: DPProfileExtended }) => {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="font-black text-gray-800 text-lg flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            المستندات
+          </h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {dp.idCardUrl ? (
+              <a href={dp.idCardUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-2xl transition-all border border-blue-200">
+                <div className="w-12 h-12 bg-blue-200 text-blue-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-black text-blue-800">البطاقة الشخصية</p>
+                  <p className="text-blue-600 text-sm font-bold">اضغط للعرض</p>
+                </div>
+              </a>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-center">
+                <p className="text-gray-500 font-bold text-sm">لا يوجد بطاقة شخصية</p>
+              </div>
+            )}
+
+            {dp.medicalReportUrl ? (
+              <a href={dp.medicalReportUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-amber-50 hover:bg-amber-100 rounded-2xl transition-all border border-amber-200">
+                <div className="w-12 h-12 bg-amber-200 text-amber-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-black text-amber-800">التقرير الطبي</p>
+                  <p className="text-amber-600 text-sm font-bold">اضغط للعرض</p>
+                </div>
+              </a>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-center">
+                <p className="text-gray-500 font-bold text-sm">لا يوجد تقرير طبي</p>
+              </div>
+            )}
+
+            {dp.signatureUrl ? (
+              <a href={dp.signatureUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-green-50 hover:bg-green-100 rounded-2xl transition-all border border-green-200">
+                <div className="w-12 h-12 bg-green-200 text-green-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732a1 1 0 011.414 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-black text-green-800">التوقيع</p>
+                  <p className="text-green-600 text-sm font-bold">اضغط للعرض</p>
+                </div>
+              </a>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-center">
+                <p className="text-gray-500 font-bold text-sm">لا يوجد توقيع</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Emergency Reports Tab
+const EmergencyTab = ({ 
+  emergencyReports, 
+  loading,
+  onRefresh,
+  onNewReport 
+}: { 
+  emergencyReports: EmergencyReport[]; 
+  loading: boolean;
+  onRefresh: () => void;
+  onNewReport: () => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-black text-gray-800">البلاغات الطارئة</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={onNewReport}
+            className="flex items-center gap-2 px-4 py-3 bg-gradient-to-l from-red-600 to-red-700 text-white rounded-xl font-bold hover:from-red-700 hover:to-red-800 transition-all shadow-lg shadow-red-200"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            بلاغ جديد
+          </button>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-16 h-16 border-4 border-red-200 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700 font-bold">جاري تحميل البلاغات...</p>
+        </div>
+      )}
+
+      {/* Reports List */}
+      {!loading && emergencyReports.length === 0 ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <p className="text-gray-600 font-bold text-lg">لا توجد بلاغات طارئة مسجلة</p>
+          <p className="text-gray-400 font-bold text-sm mt-2">يمكنك تقديم بلاغ طارئ جديد باستخدام الزر أعلاه</p>
+        </div>
+      ) : !loading && (
+        <div className="space-y-4">
+          {emergencyReports.map((report) => (
+            <div key={report.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden hover:border-red-200 transition-colors">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      report.urgency === 'عاجل جداً' ? 'bg-red-500 animate-pulse' :
+                      report.urgency === 'عاجل' ? 'bg-orange-500' : 'bg-blue-500'
+                    }`}></div>
+                    <div>
+                      <h3 className="font-black text-gray-800">{report.emergencyType}</h3>
+                      <p className="text-xs text-gray-500 font-bold mt-1">
+                        {new Date(report.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${STATUS_COLORS[report.status] || STATUS_COLORS['قيد الانتظار']}`}>
+                    {report.status}
+                  </span>
+                </div>
+                <p className="text-gray-700 font-bold text-sm mb-3 line-clamp-2">{report.description}</p>
+                {report.location && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500 font-bold mb-3">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    </svg>
+                    {report.location}
+                  </div>
+                )}
+                {report.resolutionNotes && (
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                    <p className="text-xs font-black text-emerald-800 mb-1">ملاحظات الحل:</p>
+                    <p className="text-sm text-emerald-700 font-bold">{report.resolutionNotes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Update Requests Tab
+const UpdatesTab = ({ 
+  updateRequests, 
+  loading,
+  onRefresh,
+  onNewRequest 
+}: { 
+  updateRequests: UpdateRequest[]; 
+  loading: boolean;
+  onRefresh: () => void;
+  onNewRequest: () => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-black text-gray-800">طلبات تحديث البيانات</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={onNewRequest}
+            className="flex items-center gap-2 px-4 py-3 bg-gradient-to-l from-emerald-600 to-emerald-700 text-white rounded-xl font-bold hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-200"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            طلب جديد
+          </button>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700 font-bold">جاري تحميل الطلبات...</p>
+        </div>
+      )}
+
+      {/* Requests List */}
+      {!loading && updateRequests.length === 0 ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <p className="text-gray-600 font-bold text-lg">لا توجد طلبات تحديث مسجلة</p>
+          <p className="text-gray-400 font-bold text-sm mt-2">يمكنك تقديم طلب تحديث بيانات جديد باستخدام الزر أعلاه</p>
+        </div>
+      ) : !loading && (
+        <div className="space-y-4">
+          {updateRequests.map((request) => (
+            <div key={request.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden hover:border-emerald-200 transition-colors">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-black text-gray-800">{request.fieldName}</h3>
+                    <p className="text-xs text-gray-500 font-bold mt-1">
+                      {new Date(request.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${STATUS_COLORS[request.status] || STATUS_COLORS['قيد الانتظار']}`}>
+                    {request.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 font-bold mb-1">القيمة القديمة</p>
+                    <p className="text-sm font-black text-gray-700">{request.oldValue || '-'}</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-xl p-3">
+                    <p className="text-xs text-emerald-600 font-bold mb-1">القيمة الجديدة</p>
+                    <p className="text-sm font-black text-emerald-800">{request.newValue}</p>
+                  </div>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                  <p className="text-xs font-black text-amber-800 mb-1">سبب التحديث:</p>
+                  <p className="text-sm text-amber-700 font-bold">{request.reason}</p>
+                </div>
+                {request.reviewedAt && (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 font-bold">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    تمت المراجعة: {new Date(request.reviewedAt).toLocaleDateString('ar-EG')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Complaints Tab
+const ComplaintsTab = ({ 
+  complaints, 
+  loading,
+  onRefresh,
+  onNewComplaint 
+}: { 
+  complaints: Complaint[]; 
+  loading: boolean;
+  onRefresh: () => void;
+  onNewComplaint: () => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-black text-gray-800">الشكاوى والمقترحات</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={onNewComplaint}
+            className="flex items-center gap-2 px-4 py-3 bg-gradient-to-l from-emerald-600 to-emerald-700 text-white rounded-xl font-bold hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-lg shadow-emerald-200"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            شكوى جديدة
+          </button>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700 font-bold">جاري تحميل الشكاوى...</p>
+        </div>
+      )}
+
+      {/* Complaints List */}
+      {!loading && complaints.length === 0 ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </div>
+          <p className="text-gray-600 font-bold text-lg">لا توجد شكاوى مسجلة</p>
+          <p className="text-gray-400 font-bold text-sm mt-2">يمكنك تقديم شكوى أو مقترح جديد باستخدام الزر أعلاه</p>
+        </div>
+      ) : !loading && (
+        <div className="space-y-4">
+          {complaints.map((complaint) => (
+            <div key={complaint.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden hover:border-emerald-200 transition-colors">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-black">{complaint.category}</span>
+                      {complaint.isAnonymous && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-600 rounded-full text-xs font-black">مجهول</span>
+                      )}
+                    </div>
+                    <h3 className="font-black text-gray-800">{complaint.subject}</h3>
+                    <p className="text-xs text-gray-500 font-bold mt-1">
+                      {new Date(complaint.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black border-2 ${STATUS_COLORS[complaint.status] || STATUS_COLORS['جديد']}`}>
+                    {complaint.status}
+                  </span>
+                </div>
+                <p className="text-gray-700 font-bold text-sm mb-3">{complaint.description}</p>
+                {complaint.response && (
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                    <p className="text-xs font-black text-emerald-800 mb-1">الرد:</p>
+                    <p className="text-sm text-emerald-700 font-bold">{complaint.response}</p>
+                    {complaint.respondedAt && (
+                      <p className="text-xs text-emerald-500 font-bold mt-2">
+                        {new Date(complaint.respondedAt).toLocaleDateString('ar-EG')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============ HELPER COMPONENTS ============
+
+const InfoField = ({ label, value, badge, dir, className = '' }: { label: string; value: string; badge?: string; dir?: 'ltr' | 'rtl'; className?: string }) => (
+  <div className={className}>
+    <p className="text-xs text-gray-500 font-bold mb-1">{label}</p>
+    {badge ? (
+      <span className={`inline-block px-3 py-1.5 rounded-full text-sm font-black border-2 ${badge}`}>
+        {value}
+      </span>
+    ) : (
+      <p className="font-black text-gray-800" dir={dir}>{value}</p>
+    )}
+  </div>
+);
+
+const StatBox = ({ label, value, color }: { label: string; value: number; color: string }) => {
+  const colors: Record<string, string> = {
+    blue: 'from-blue-50 to-blue-100 border-blue-200 text-blue-700',
+    pink: 'from-pink-50 to-pink-100 border-pink-200 text-pink-700',
+    indigo: 'from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700',
+    purple: 'from-purple-50 to-purple-100 border-purple-200 text-purple-700',
+    amber: 'from-amber-50 to-amber-100 border-amber-200 text-amber-700',
+    gray: 'from-gray-50 to-gray-100 border-gray-200 text-gray-700'
+  };
+
+  return (
+    <div className={`text-center p-4 bg-gradient-to-br ${colors[color]} rounded-2xl border`}>
+      <div className="text-2xl font-black">{value}</div>
+      <div className="text-xs font-bold mt-1">{label}</div>
+    </div>
+  );
+};
+
+const EmptyState = ({ message }: { message: string }) => (
+  <div className="text-center py-8">
+    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+      </svg>
+    </div>
+    <p className="text-gray-600 font-bold">{message}</p>
+  </div>
+);
+
+export default DPPortal;

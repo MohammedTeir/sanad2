@@ -1,0 +1,660 @@
+// views/beneficiary/DPPortal.tsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { beneficiaryService } from '../../services/beneficiaryService';
+import { sessionService } from '../../services/sessionService';
+import Toast from '../../components/Toast';
+import { GAZA_LOCATIONS, getAreasByGovernorate } from '../../constants/gazaLocations';
+import { 
+  User, Users, Home, Activity, Phone, ShieldCheck, 
+  MapPin, Calendar, Heart, AlertTriangle, Save, X, 
+  Edit3, ChevronLeft, Baby, Info, Clipboard, Trash2, 
+  Plus, Droplets, Zap, Trash, Eye, Briefcase, FileText,
+  CheckCircle2, AlertCircle, LogOut, ExternalLink
+} from 'lucide-react';
+import type { FamilyMember } from '../../types';
+
+// --- Interfaces ---
+interface DPProfile {
+  id: string;
+  headFirstName?: string;
+  headFatherName?: string;
+  headGrandfatherName?: string;
+  headFamilyName?: string;
+  headOfFamily: string;
+  nationalId: string;
+  gender: 'ذكر' | 'أنثى';
+  dateOfBirth: string;
+  age: number;
+  maritalStatus: string;
+  widowReason?: string;
+  headRole?: 'father' | 'mother' | 'wife_head';
+  phoneNumber: string;
+  phoneSecondary?: string;
+  totalMembersCount: number;
+  registrationStatus?: 'قيد الانتظار' | 'موافق' | 'مرفوض';
+  vulnerabilityPriority?: 'عالي جداً' | 'عالي' | 'متوسط' | 'منخفض';
+  vulnerabilityScore?: number;
+  vulnerabilityReason?: string;
+  disabilityType?: string;
+  disabilitySeverity?: string;
+  disabilityDetails?: string;
+  chronicDiseaseType?: string;
+  chronicDiseaseDetails?: string;
+  warInjuryType?: string;
+  warInjuryDetails?: string;
+  medicalFollowupRequired?: boolean;
+  medicalFollowupFrequency?: string;
+  medicalFollowupDetails?: string;
+  isWorking?: boolean;
+  job?: string;
+  monthlyIncome?: number;
+  monthlyIncomeRange?: string;
+  wifeName?: string;
+  wifeNationalId?: string;
+  wifeDateOfBirth?: string;
+  wifeAge?: number;
+  wifeIsPregnant?: boolean;
+  wifePregnancyMonth?: number;
+  wifePregnancySpecialNeeds?: boolean;
+  wifePregnancyFollowupDetails?: string;
+  wifeIsWorking?: boolean;
+  wifeOccupation?: string;
+  wifeMedicalFollowupRequired?: boolean;
+  wifeDisabilityType?: string;
+  currentHousingType?: string;
+  currentHousingGovernorate?: string;
+  currentHousingRegion?: string;
+  currentHousingLandmark?: string;
+  currentHousingSanitaryFacilities?: 'private' | 'shared';
+  currentHousingWaterSource?: 'public_network' | 'tanker' | 'well' | 'other';
+  currentHousingElectricityAccess?: 'public_grid' | 'generator' | 'solar' | 'none' | 'other';
+  originalAddressGovernorate?: string;
+  originalAddressRegion?: string;
+  originalAddressDetails?: string;
+  idCardUrl?: string;
+  medicalReportUrl?: string;
+  signatureUrl?: string;
+  maleCount?: number;
+  femaleCount?: number;
+  childCount?: number;
+  teenagerCount?: number;
+  adultCount?: number;
+  seniorCount?: number;
+}
+
+// --- Constants & Helpers ---
+const MARITAL_STATUS_STYLES: Record<string, string> = {
+  'أعزب': 'bg-blue-50 text-blue-700 border-blue-100',
+  'متزوج': 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  'أرمل': 'bg-gray-100 text-gray-700 border-gray-200',
+  'مطلق': 'bg-amber-50 text-amber-700 border-amber-100',
+  'أسرة هشة': 'bg-purple-50 text-purple-700 border-purple-100'
+};
+
+const VULNERABILITY_STYLES: Record<string, string> = {
+  'عالي جداً': 'bg-red-500 text-white',
+  'عالي': 'bg-orange-500 text-white',
+  'متوسط': 'bg-amber-500 text-white',
+  'منخفض': 'bg-emerald-500 text-white'
+};
+
+const getFullName = (dp: DPProfile): string => {
+  if (dp.headFirstName && dp.headFamilyName) {
+    return `${dp.headFirstName} ${dp.headFatherName || ''} ${dp.headGrandfatherName || ''} ${dp.headFamilyName}`.replace(/\s+/g, ' ').trim();
+  }
+  return dp.headOfFamily;
+};
+
+const calculateAge = (dob: string): number => {
+  if (!dob) return 0;
+  const today = new Date();
+  const birthDate = new Date(dob);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age;
+};
+
+// --- Main Component ---
+const DPPortal: React.FC = () => {
+  const navigate = useNavigate();
+  const [dp, setDp] = useState<DPProfile | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'basic' | 'family' | 'housing' | 'health' | 'spouse' | 'documents'>('basic');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  
+  // Edit Mode States
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editableData, setEditableData] = useState<DPProfile | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Modals
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
+  const [tempMember, setTempMember] = useState<Partial<FamilyMember>>({});
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setLoading(true);
+      const currentUser = sessionService.getCurrentUser();
+      if (!currentUser?.familyId) throw new Error("No Family ID");
+
+      const profile = await beneficiaryService.getFamilyProfile(currentUser.familyId);
+      const members = await beneficiaryService.getFamilyMembers(currentUser.familyId);
+      
+      setDp(profile);
+      setFamilyMembers(members);
+    } catch (err: any) {
+      setToast({ message: "فشل تحميل البيانات", type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Logic Functions ---
+  const enterEditMode = () => {
+    setEditableData(dp);
+    setIsEditMode(true);
+    setHasUnsavedChanges(false);
+  };
+
+  const handleFieldChange = (field: keyof DPProfile, value: any) => {
+    if (editableData) {
+      setEditableData({ ...editableData, [field]: value });
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editableData) return;
+    setIsSaving(true);
+    try {
+      const currentUser = sessionService.getCurrentUser();
+      const changes: any[] = [];
+      
+      // Compare phone numbers (common update request)
+      if (editableData.phoneNumber !== dp?.phoneNumber) {
+        changes.push({ field: 'phone_number', value: editableData.phoneNumber });
+      }
+
+      for (const change of changes) {
+        await beneficiaryService.submitUpdateRequest(
+          currentUser!.familyId!,
+          change.field,
+          String(change.value),
+          `تحديث تلقائي من بوابة المستفيد`
+        );
+      }
+
+      setToast({ message: "تم إرسال طلبات التحديث للمراجعة", type: 'success' });
+      setIsEditMode(false);
+    } catch (err) {
+      setToast({ message: "فشل حفظ التغييرات", type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-6">
+      <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="font-black text-indigo-900 text-xl animate-pulse">جاري تحميل ملف العائلة...</p>
+    </div>
+  );
+
+  if (!dp) return <div className="p-20 text-center font-bold">بيانات العائلة غير متوفرة</div>;
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] pb-32 md:pb-12 dir-rtl font-tajawal">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* --- 1. PREMIUM GLASSMORPHISM HEADER --- */}
+      <header className="relative overflow-hidden bg-slate-900 rounded-b-[4rem] md:rounded-[4rem] p-8 md:p-16 text-white shadow-2xl mb-10">
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
+
+        <div className="relative flex flex-col md:flex-row justify-between items-center gap-10">
+          <div className="flex flex-col md:flex-row items-center gap-8 text-center md:text-right">
+            <div className="relative group">
+              <div className="w-32 h-32 bg-white/10 backdrop-blur-2xl rounded-[3rem] flex items-center justify-center border border-white/20 shadow-2xl transition-transform group-hover:scale-105">
+                <User size={56} className="text-indigo-300" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-emerald-500 rounded-2xl border-4 border-slate-900 flex items-center justify-center shadow-lg">
+                <CheckCircle2 size={24} className="text-white" />
+              </div>
+            </div>
+            
+            <div>
+              <h1 className="text-3xl md:text-5xl font-black mb-4 tracking-tight leading-tight">
+                {getFullName(dp)}
+              </h1>
+              <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                <span className="px-5 py-2 bg-white/10 backdrop-blur-md rounded-2xl text-sm font-bold border border-white/10 flex items-center gap-2">
+                  <Clipboard size={16} /> {dp.nationalId}
+                </span>
+                <span className={`px-5 py-2 rounded-2xl text-sm font-black border ${
+                  dp.registrationStatus === 'موافق' 
+                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' 
+                    : 'bg-amber-500/20 border-amber-500/30 text-amber-300'
+                }`}>
+                  {dp.registrationStatus}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden md:flex gap-4">
+            {!isEditMode ? (
+              <button 
+                onClick={enterEditMode}
+                className="flex items-center gap-3 px-10 py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-indigo-700 transition-all transform hover:-translate-y-1 active:scale-95"
+              >
+                <Edit3 size={22} /> تعديل الملف
+              </button>
+            ) : (
+              <>
+                <button onClick={() => setIsEditMode(false)} className="px-8 py-5 bg-white/10 text-white rounded-[2rem] font-black border border-white/20 hover:bg-white/20 transition-all">إلغاء</button>
+                <button 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  className="px-10 py-5 bg-emerald-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-emerald-700 transition-all flex items-center gap-2"
+                >
+                  {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><Save size={22} /> حفظ</>}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* --- 2. QUICK STATS BENTO ROW --- */}
+      <section className="grid grid-cols-2 lg:grid-cols-5 gap-4 px-4 md:px-12 mb-10">
+        <StatCard label="أفراد العائلة" value={dp.totalMembersCount} icon={<Users className="text-blue-600" />} color="blue" />
+        <StatCard label="ذكور" value={dp.maleCount || 0} icon={<User className="text-indigo-600" />} color="indigo" />
+        <StatCard label="إناث" value={dp.femaleCount || 0} icon={<Heart className="text-pink-600" />} color="pink" />
+        <StatCard label="أطفال" value={dp.childCount || 0} icon={<Baby className="text-amber-600" />} color="amber" />
+        <StatCard label="كبار سن" value={dp.seniorCount || 0} icon={<Activity className="text-red-600" />} color="red" />
+      </section>
+
+      {/* --- 3. NAVIGATION TABS --- */}
+      <nav className="px-4 md:px-12 mb-10 sticky top-6 z-40">
+        <div className="bg-white/70 backdrop-blur-2xl p-2.5 rounded-[2.5rem] shadow-2xl shadow-indigo-900/5 flex overflow-x-auto no-scrollbar gap-2 border border-white/50">
+          <TabButton active={activeTab === 'basic'} onClick={() => setActiveTab('basic')} icon={<User size={20} />} label="الهوية" />
+          <TabButton active={activeTab === 'family'} onClick={() => setActiveTab('family')} icon={<Users size={20} />} label="العائلة" />
+          <TabButton active={activeTab === 'housing'} onClick={() => setActiveTab('housing')} icon={<Home size={20} />} label="السكن" />
+          <TabButton active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={<Activity size={20} />} label="الصحة" />
+          <TabButton active={activeTab === 'spouse'} onClick={() => setActiveTab('spouse')} icon={<Heart size={20} />} label="الزوج/ة" />
+          <TabButton active={activeTab === 'documents'} onClick={() => setActiveTab('documents')} icon={<FileText size={20} />} label="الوثائق" />
+        </div>
+      </nav>
+
+      {/* --- 4. CONTENT BENTO GRID --- */}
+      <main className="px-4 md:px-12 space-y-10">
+        {/* BASIC INFO TAB */}
+        {activeTab === 'basic' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Bento Block: Identity */}
+            <div className="lg:col-span-2 bg-white rounded-[3.5rem] p-10 md:p-14 shadow-xl shadow-slate-200/50 border border-slate-100">
+              <SectionHeader title="معلومات الهوية" icon={<ShieldCheck className="text-indigo-600" />} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10">
+                <InfoField label="الاسم الأول" value={dp.headFirstName} isEdit={isEditMode} onChange={(v) => handleFieldChange('headFirstName', v)} />
+                <InfoField label="اسم العائلة" value={dp.headFamilyName} isEdit={isEditMode} onChange={(v) => handleFieldChange('headFamilyName', v)} />
+                <InfoField label="رقم الهوية" value={dp.nationalId} isEdit={false} />
+                <InfoField label="تاريخ الميلاد" value={dp.dateOfBirth} isEdit={isEditMode} type="date" onChange={(v) => handleFieldChange('dateOfBirth', v)} />
+                <InfoField label="الجنس" value={dp.gender} isEdit={isEditMode} type="select" options={['ذكر', 'أنثى']} onChange={(v) => handleFieldChange('gender', v)} />
+                <InfoField 
+                  label="الحالة الاجتماعية" 
+                  value={dp.maritalStatus} 
+                  isEdit={isEditMode} 
+                  type="select" 
+                  options={['أعزب', 'متزوج', 'أرمل', 'مطلق', 'أسرة هشة']} 
+                  onChange={(v) => handleFieldChange('maritalStatus', v)} 
+                  badgeStyle={MARITAL_STATUS_STYLES[dp.maritalStatus]}
+                />
+              </div>
+            </div>
+
+            {/* Bento Block: Vulnerability Score */}
+            <div className="space-y-8">
+              <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[3.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                <Activity className="absolute -bottom-6 -left-6 w-40 h-40 text-white/10" />
+                <h3 className="text-xl font-black mb-6 flex items-center gap-3"><AlertCircle size={24} /> درجة الأولوية</h3>
+                <div className="text-8xl font-black mb-4 tracking-tighter">{dp.vulnerabilityScore}</div>
+                <div className={`inline-flex px-6 py-2 rounded-2xl font-black text-sm shadow-lg ${VULNERABILITY_STYLES[dp.vulnerabilityPriority || 'متوسط']}`}>
+                  {dp.vulnerabilityPriority}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[3rem] p-8 shadow-xl border border-slate-100">
+                <SectionHeader title="الاتصال" icon={<Phone className="text-emerald-600" />} />
+                <div className="space-y-6">
+                  <InfoField label="رقم الهاتف الأساسي" value={dp.phoneNumber} isEdit={isEditMode} type="tel" onChange={(v) => handleFieldChange('phoneNumber', v)} />
+                  <InfoField label="رقم الهاتف البديل" value={dp.phoneSecondary || 'لا يوجد'} isEdit={isEditMode} type="tel" onChange={(v) => handleFieldChange('phoneSecondary', v)} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FAMILY TAB */}
+        {activeTab === 'family' && (
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-center bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 gap-6">
+              <div className="flex items-center gap-5">
+                <div className="p-4 bg-indigo-50 rounded-[1.5rem] text-indigo-600 shadow-inner"><Users size={32} /></div>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-800">أفراد العائلة</h3>
+                  <p className="text-slate-500 font-bold">إدارة بيانات التابعين والأقارب المسجلين</p>
+                </div>
+              </div>
+              {isEditMode && (
+                <button className="w-full md:w-auto flex items-center justify-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">
+                  <Plus size={22} /> إضافة فرد
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {familyMembers.length > 0 ? familyMembers.map((member, idx) => (
+                <div key={member.id || idx} className="bg-white rounded-[3rem] p-10 shadow-xl shadow-slate-200/40 border border-slate-50 hover:border-indigo-200 transition-all group relative">
+                  <div className="flex justify-between items-start mb-8">
+                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner">
+                      {member.gender === 'ذكر' ? <User size={32} /> : <User size={32} className="text-pink-500 group-hover:text-white" />}
+                    </div>
+                    <span className="px-5 py-2 bg-indigo-50 text-indigo-700 rounded-2xl text-xs font-black border border-indigo-100">
+                      {member.relation}
+                    </span>
+                  </div>
+
+                  <h4 className="text-2xl font-black text-slate-800 mb-2">{member.name}</h4>
+                  <p className="text-slate-500 font-bold mb-8 flex items-center gap-2">
+                    <Clipboard size={16} /> {member.nationalId}
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-4 pt-8 border-t border-slate-100">
+                    <div className="text-center">
+                      <p className="text-[10px] text-slate-400 font-black uppercase mb-1">العمر</p>
+                      <p className="font-black text-slate-800 text-lg">{member.age}</p>
+                    </div>
+                    <div className="text-center border-x border-slate-100">
+                      <p className="text-[10px] text-slate-400 font-black uppercase mb-1">الجنس</p>
+                      <p className="font-black text-slate-800 text-lg">{member.gender === 'ذكر' ? 'ذ' : 'أ'}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-slate-400 font-black uppercase mb-1">الحالة</p>
+                      <p className="font-black text-emerald-600">سليم</p>
+                    </div>
+                  </div>
+
+                  {isEditMode && (
+                    <div className="flex gap-3 mt-8">
+                      <button className="flex-1 py-4 bg-slate-50 text-slate-600 rounded-2xl font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2">
+                        <Edit3 size={18} /> تعديل
+                      </button>
+                      <button className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-all">
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )) : (
+                <div className="col-span-full py-20 bg-white rounded-[3rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400">
+                  <Users size={64} className="mb-4 opacity-20" />
+                  <p className="font-black text-xl">لا يوجد أفراد مسجلين</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* HOUSING TAB */}
+        {activeTab === 'housing' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white rounded-[3.5rem] p-10 md:p-14 shadow-xl border border-slate-100">
+              <SectionHeader title="الموقع الحالي" icon={<MapPin className="text-emerald-600" />} />
+              <div className="space-y-8">
+                <InfoField label="المحافظة" value={dp.currentHousingGovernorate} isEdit={isEditMode} type="select" options={GAZA_LOCATIONS.map(l => l.arabic_name)} />
+                <InfoField label="المنطقة / الحي" value={dp.currentHousingRegion} isEdit={isEditMode} />
+                <InfoField label="أقرب معلم معروف" value={dp.currentHousingLandmark} isEdit={isEditMode} />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[3.5rem] p-10 md:p-14 shadow-xl border border-slate-100">
+              <SectionHeader title="المرافق والخدمات" icon={<Zap className="text-amber-600" />} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100">
+                  <div className="flex items-center gap-3 mb-4 text-blue-700 font-black">
+                    <Droplets size={20} /> مصدر المياه
+                  </div>
+                  <p className="font-black text-slate-800">{dp.currentHousingWaterSource || 'غير محدد'}</p>
+                </div>
+                <div className="p-6 bg-amber-50 rounded-[2rem] border border-amber-100">
+                  <div className="flex items-center gap-3 mb-4 text-amber-700 font-black">
+                    <Zap size={20} /> الكهرباء
+                  </div>
+                  <p className="font-black text-slate-800">{dp.currentHousingElectricityAccess || 'غير محدد'}</p>
+                </div>
+                <div className="md:col-span-2 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                  <div className="flex items-center gap-3 mb-4 text-slate-700 font-black">
+                    <Home size={20} /> نوع المسكن
+                  </div>
+                  <p className="font-black text-slate-800">{dp.currentHousingType || 'غير محدد'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HEALTH TAB */}
+        {activeTab === 'health' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-white rounded-[3.5rem] p-10 md:p-14 shadow-xl border border-slate-100">
+              <SectionHeader title="السجل الصحي" icon={<Activity className="text-red-600" />} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="space-y-8">
+                  <InfoField label="نوع الإعاقة" value={dp.disabilityType || 'لا يوجد'} isEdit={isEditMode} />
+                  <InfoField label="الأمراض المزمنة" value={dp.chronicDiseaseType || 'لا يوجد'} isEdit={isEditMode} />
+                </div>
+                <div className="space-y-8">
+                  <InfoField label="إصابات الحرب" value={dp.warInjuryType || 'لا يوجد'} isEdit={isEditMode} />
+                  <div className="p-6 bg-red-50 rounded-[2rem] border border-red-100">
+                    <p className="text-xs font-black text-red-400 uppercase mb-2">المتابعة الطبية</p>
+                    <p className="font-black text-red-700">{dp.medicalFollowupRequired ? `مطلوب (${dp.medicalFollowupFrequency})` : 'غير مطلوبة'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 rounded-[3.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+              <Briefcase className="absolute -bottom-6 -right-6 w-40 h-40 text-white/5" />
+              <SectionHeader title="العمل والدخل" icon={<Briefcase className="text-indigo-400" />} />
+              <div className="space-y-8 relative z-10">
+                <div>
+                  <p className="text-slate-400 text-xs font-black mb-2 uppercase tracking-widest">المهنة الحالية</p>
+                  <p className="text-2xl font-black">{dp.isWorking ? dp.job : 'لا يعمل حالياً'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs font-black mb-2 uppercase tracking-widest">نطاق الدخل الشهري</p>
+                  <p className="text-xl font-black text-indigo-300">{dp.monthlyIncomeRange || 'بدون دخل'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SPOUSE TAB */}
+        {activeTab === 'spouse' && (
+          <div className="bg-white rounded-[3.5rem] p-10 md:p-14 shadow-xl border border-slate-100">
+            <SectionHeader title="معلومات الزوج / الزوجة" icon={<Heart className="text-pink-600" />} />
+            {dp.wifeName ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                <div className="space-y-10">
+                  <InfoField label="الاسم الكامل" value={dp.wifeName} isEdit={isEditMode} />
+                  <InfoField label="رقم الهوية" value={dp.wifeNationalId} isEdit={isEditMode} />
+                  <InfoField label="تاريخ الميلاد" value={dp.wifeDateOfBirth} isEdit={isEditMode} type="date" />
+                </div>
+                <div className="space-y-8">
+                  <div className={`p-8 rounded-[2.5rem] border-2 transition-all ${dp.wifeIsPregnant ? 'bg-pink-50 border-pink-200' : 'bg-slate-50 border-slate-100'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-black text-slate-800 flex items-center gap-2"><Baby size={20} className="text-pink-500" /> حالة الحمل</h4>
+                      {dp.wifeIsPregnant && <span className="px-4 py-1 bg-pink-500 text-white rounded-xl text-xs font-black">حامل</span>}
+                    </div>
+                    <p className="font-black text-slate-600">
+                      {dp.wifeIsPregnant ? `في الشهر ${dp.wifePregnancyMonth}` : 'لا يوجد حمل حالياً'}
+                    </p>
+                  </div>
+                  <InfoField label="العمل" value={dp.wifeIsWorking ? dp.wifeOccupation : 'لا تعمل'} isEdit={isEditMode} />
+                </div>
+              </div>
+            ) : (
+              <div className="py-20 text-center text-slate-400 flex flex-col items-center">
+                <Heart size={64} className="mb-4 opacity-10" />
+                <p className="font-black text-xl">لا توجد بيانات مسجلة للزوج/ة</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DOCUMENTS TAB */}
+        {activeTab === 'documents' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <DocumentCard title="البطاقة الشخصية" url={dp.idCardUrl} icon={<User size={32} />} />
+            <DocumentCard title="التقرير الطبي" url={dp.medicalReportUrl} icon={<Activity size={32} />} />
+            <DocumentCard title="نموذج التوقيع" url={dp.signatureUrl} icon={<Edit3 size={32} />} />
+          </div>
+        )}
+      </main>
+
+      {/* --- 5. MOBILE FLOATING ACTION BUTTON --- */}
+      {!isEditMode ? (
+        <button 
+          onClick={enterEditMode}
+          className="md:hidden fixed bottom-8 right-8 w-18 h-18 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_rgba(79,70,229,0.4)] flex items-center justify-center z-50 transform active:scale-90 transition-all border-4 border-white"
+        >
+          <Edit3 size={28} />
+        </button>
+      ) : (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-2xl p-6 border-t border-slate-200 flex gap-4 z-50 shadow-[0_-15px_50px_rgba(0,0,0,0.1)]">
+          <button 
+            onClick={() => setIsEditMode(false)}
+            className="flex-1 py-5 bg-slate-100 text-slate-700 rounded-2xl font-black flex items-center justify-center gap-2"
+          >
+            <X size={22} /> إلغاء
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black shadow-xl flex items-center justify-center gap-2"
+          >
+            {isSaving ? <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div> : <><Save size={22} /> حفظ التغييرات</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Helper Components ---
+
+const StatCard = ({ label, value, icon, color }: any) => {
+  const colorMap: any = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+    pink: 'bg-pink-50 text-pink-600 border-pink-100',
+    amber: 'bg-amber-50 text-amber-600 border-amber-100',
+    red: 'bg-red-50 text-red-600 border-red-100'
+  };
+  return (
+    <div className={`p-6 md:p-8 rounded-[2.5rem] border shadow-sm flex items-center gap-5 transition-all hover:shadow-md bg-white ${colorMap[color]}`}>
+      <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white shadow-inner flex items-center justify-center">
+        {icon}
+      </div>
+      <div>
+        <p className="text-[10px] md:text-xs font-black opacity-60 uppercase tracking-widest mb-1">{label}</p>
+        <p className="text-2xl md:text-3xl font-black text-slate-800">{value}</p>
+      </div>
+    </div>
+  );
+};
+
+const TabButton = ({ active, onClick, icon, label }: any) => (
+  <button
+    onClick={onClick}
+    className={`flex-1 min-w-[120px] flex items-center justify-center gap-3 py-4 px-6 rounded-[2rem] font-black text-sm transition-all whitespace-nowrap ${
+      active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'
+    }`}
+  >
+    {icon} <span>{label}</span>
+  </button>
+);
+
+const SectionHeader = ({ title, icon }: any) => (
+  <h3 className="text-2xl font-black text-slate-800 mb-10 flex items-center gap-4">
+    <span className="p-3 bg-slate-50 rounded-2xl shadow-inner">{icon}</span>
+    {title}
+  </h3>
+);
+
+const InfoField = ({ label, value, isEdit, type = 'text', options = [], onChange, badgeStyle }: any) => (
+  <div className="space-y-3">
+    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.15em] block pr-1">{label}</label>
+    {isEdit ? (
+      type === 'select' ? (
+        <select 
+          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 focus:bg-white outline-none transition-all appearance-none"
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+        >
+          {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      ) : (
+        <input 
+          type={type}
+          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 focus:bg-white outline-none transition-all"
+          value={value || ''}
+          onChange={(e) => onChange?.(e.target.value)}
+        />
+      )
+    ) : (
+      <div className={`px-5 py-4 rounded-2xl font-black text-slate-700 border border-transparent ${badgeStyle || 'bg-slate-50/60'}`}>
+        {value || '—'}
+      </div>
+    )}
+  </div>
+);
+
+const DocumentCard = ({ title, url, icon }: any) => (
+  <div className="bg-white rounded-[3rem] p-8 shadow-xl border border-slate-100 group">
+    <div className="flex items-center justify-between mb-8">
+      <div className="p-4 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+        {icon}
+      </div>
+      {url && (
+        <a href={url} target="_blank" rel="noreferrer" className="p-3 bg-slate-50 rounded-xl text-slate-400 hover:text-indigo-600 transition-all">
+          <ExternalLink size={20} />
+        </a>
+      )}
+    </div>
+    <h4 className="text-xl font-black text-slate-800 mb-2">{title}</h4>
+    {url ? (
+      <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-slate-100">
+        <img src={url} alt={title} className="w-full h-full object-cover" />
+      </div>
+    ) : (
+      <div className="aspect-video rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
+        <FileText size={32} className="mb-2 opacity-20" />
+        <p className="text-xs font-bold">غير متوفر</p>
+      </div>
+    )}
+  </div>
+);
+
+export default DPPortal;

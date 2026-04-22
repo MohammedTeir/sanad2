@@ -1,0 +1,839 @@
+// views/camp-manager/EmergencyReportsManagement.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { sessionService } from '../../services/sessionService';
+import { realDataService } from '../../services/realDataServiceBackend';
+import { makeAuthenticatedRequest } from '../../utils/apiUtils';
+import Toast from '../../components/Toast';
+import ConfirmModal from '../../components/ConfirmModal';
+import { EmergencyReport, EmergencyReportStatus, UrgencyLevel } from '../../types';
+
+const URGENCY_COLORS: { [key: string]: string } = {
+  'عاجل جداً': 'bg-red-500',
+  'عاجل': 'bg-orange-500',
+  'عادي': 'bg-blue-500'
+};
+
+const STATUS_COLORS: { [key: string]: string } = {
+  'جديد': 'bg-blue-50 text-blue-700 border-blue-200',
+  'قيد المعالجة': 'bg-amber-50 text-amber-700 border-amber-200',
+  'تم التحويل': 'bg-purple-50 text-purple-700 border-purple-200',
+  'تم الحل': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'مرفوض': 'bg-red-50 text-red-700 border-red-200'
+};
+
+const URGENCIES: UrgencyLevel[] = ['عاجل جداً', 'عاجل', 'عادي'];
+const STATUSES: EmergencyReportStatus[] = ['جديد', 'قيد المعالجة', 'تم التحويل', 'تم الحل', 'مرفوض'];
+
+const EmergencyReportsManagement: React.FC = () => {
+  const navigate = useNavigate();
+  const [reports, setReports] = useState<EmergencyReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  // Modal states
+  const [selectedReport, setSelectedReport] = useState<EmergencyReport | null>(null);
+  const [showResolutionModal, setShowResolutionModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  
+  // Form states
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [restoreReason, setRestoreReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Filter states
+  const [filterUrgency, setFilterUrgency] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [campId, setCampId] = useState<string>('');
+  const [showDeleted, setShowDeleted] = useState(false);
+  
+  const user = sessionService.getCurrentUser();
+  const isSystemAdmin = user?.role === 'SYSTEM_ADMIN';
+
+  // Helper functions for date formatting
+  const formatDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'غير متوفر';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'غير متوفر';
+    return date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const formatDateTime = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'غير متوفر';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'غير متوفر';
+    return date.toLocaleDateString('ar-EG', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Load reports
+  const loadReports = useCallback(async (campId: string, isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      
+      let url = `/staff/emergency-reports?campId=${campId}`;
+      if (showDeleted && isSystemAdmin) {
+        url += '&includeDeleted=true';
+      }
+      
+      const data = await makeAuthenticatedRequest(url);
+      setReports(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      console.error('Error loading emergency reports:', error);
+      setToast({ message: error.message || 'فشل تحميل البلاغات', type: 'error' });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [showDeleted, isSystemAdmin]);
+
+  // Initial load
+  useEffect(() => {
+    const currentUser = sessionService.getCurrentUser();
+    if (currentUser?.campId) {
+      setCampId(currentUser.campId);
+      loadReports(currentUser.campId);
+    } else {
+      setToast({ message: 'لم يتم تحديد المخيم', type: 'error' });
+      setLoading(false);
+    }
+  }, []);
+
+  // Reload when showDeleted changes
+  useEffect(() => {
+    if (campId) {
+      loadReports(campId);
+    }
+  }, [showDeleted, campId]);
+
+  const handleRefresh = () => {
+    loadReports(campId, true);
+  };
+
+  // Handle resolve report
+  const handleResolve = async () => {
+    if (!selectedReport) return;
+    
+    if (!resolutionNotes.trim()) {
+      setToast({ message: 'يرجى كتابة ملاحظات الحل', type: 'error' });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await makeAuthenticatedRequest(`/staff/emergency-reports/${selectedReport.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: 'تم الحل',
+          resolutionNotes: resolutionNotes,
+          resolvedAt: new Date().toISOString()
+        })
+      });
+      setToast({ message: 'تم تسجيل الحل بنجاح', type: 'success' });
+      setShowResolutionModal(false);
+      setResolutionNotes('');
+      setSelectedReport(null);
+      loadReports(campId);
+    } catch (error: any) {
+      console.error('Error resolving report:', error);
+      setToast({ message: error.message || 'فشل تسجيل الحل', type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle status change
+  const handleStatusChange = async (reportId: string, newStatus: string) => {
+    try {
+      await makeAuthenticatedRequest(`/staff/emergency-reports/${reportId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+      });
+      setToast({ message: 'تم تحديث الحالة بنجاح', type: 'success' });
+      loadReports(campId);
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      setToast({ message: error.message || 'فشل تحديث الحالة', type: 'error' });
+    }
+  };
+
+  // Handle delete
+  const handleDelete = (reportId: string) => {
+    setReportToDelete(reportId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!reportToDelete) return;
+
+    try {
+      setSubmitting(true);
+      await makeAuthenticatedRequest(`/staff/emergency-reports/${reportToDelete}`, {
+        method: 'DELETE'
+      });
+      setToast({ message: 'تم حذف البلاغ بنجاح', type: 'success' });
+      loadReports(campId);
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      setToast({ message: error.message || 'فشل حذف البلاغ', type: 'error' });
+    } finally {
+      setSubmitting(false);
+      setShowDeleteConfirm(false);
+      setReportToDelete(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setReportToDelete(null);
+  };
+
+  // Handle restore
+  const handleRestore = (report: EmergencyReport) => {
+    setSelectedReport(report);
+    setRestoreReason('');
+    setShowRestoreModal(true);
+  };
+
+  const confirmRestore = async () => {
+    if (!selectedReport) return;
+
+    try {
+      setSubmitting(true);
+      await realDataService.restoreEmergencyReport(selectedReport.id, restoreReason);
+      setToast({ message: 'تم استعادة البلاغ بنجاح', type: 'success' });
+      setShowRestoreModal(false);
+      setRestoreReason('');
+      setSelectedReport(null);
+      loadReports(campId);
+    } catch (error: any) {
+      console.error('Error restoring report:', error);
+      setToast({ message: error.message || 'فشل استعادة البلاغ', type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancelRestore = () => {
+    setShowRestoreModal(false);
+    setRestoreReason('');
+    setSelectedReport(null);
+  };
+
+  // Filter reports
+  const filteredReports = reports.filter(report => {
+    // Filter by urgency
+    if (filterUrgency !== 'all' && report.urgency !== filterUrgency) return false;
+    
+    // Filter by status
+    if (filterStatus !== 'all' && report.status !== filterStatus) return false;
+    
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const familyName = (report.familyName || '').toLowerCase();
+      const emergencyType = report.emergencyType.toLowerCase();
+      const description = report.description.toLowerCase();
+      const location = (report.location || '').toLowerCase();
+      return familyName.includes(query) || emergencyType.includes(query) || description.includes(query) || location.includes(query);
+    }
+    
+    return true;
+  });
+
+  // Calculate statistics
+  const stats = {
+    total: reports.filter(c => !c.deleted).length,
+    urgent: reports.filter(r => r.urgency === 'عاجل جداً' && !r.deleted).length,
+    new: reports.filter(r => r.status === 'جديد' && !r.deleted).length,
+    resolved: reports.filter(r => r.status === 'تم الحل' && !r.deleted).length,
+    deleted: reports.filter(c => c.deleted).length
+  };
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 space-y-6" dir="rtl">
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="تأكيد حذف البلاغ"
+        message="هل أنت متأكد من حذف هذا البلاغ؟ يمكن استعادته لاحقاً من قبل مدير النظام."
+        confirmText="حذف"
+        cancelText="إلغاء"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+
+      {/* Restore Modal */}
+      <ConfirmModal
+        isOpen={showRestoreModal}
+        title="استعادة بلاغ محذوف"
+        message={
+          <div className="space-y-3">
+            <p>هل أنت متأكد من استعادة هذا البلاغ؟</p>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                سبب الاستعادة (اختياري)
+              </label>
+              <textarea
+                value={restoreReason}
+                onChange={(e) => setRestoreReason(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-sm"
+                rows={3}
+                placeholder="اكتب سبب استعادة البلاغ..."
+              />
+            </div>
+          </div>
+        }
+        confirmText="استعادة"
+        cancelText="إلغاء"
+        type="success"
+        onConfirm={confirmRestore}
+        onCancel={cancelRestore}
+      />
+
+      {/* Resolution Modal */}
+      {showResolutionModal && selectedReport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black text-gray-800">تسجيل حل البلاغ</h2>
+                <button
+                  onClick={() => setShowResolutionModal(false)}
+                  className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Report Info */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${URGENCY_COLORS[selectedReport.urgency]} ${selectedReport.urgency === 'عاجل جداً' ? 'animate-pulse' : ''}`}></span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-black ${STATUS_COLORS[selectedReport.status]}`}>
+                    {selectedReport.status}
+                  </span>
+                </div>
+                <h3 className="font-black text-gray-800">{selectedReport.emergencyType}</h3>
+                <p className="text-sm text-gray-600 font-bold">
+                  {selectedReport.familyName || 'غير متوفر'}
+                </p>
+              </div>
+
+              {/* Resolution Notes Input */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  ملاحظات الحل
+                </label>
+                <textarea
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-sm"
+                  rows={6}
+                  placeholder="اكتب ملاحظات الحل هنا..."
+                  dir="rtl"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setShowResolutionModal(false)}
+                disabled={submitting}
+                className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleResolve}
+                disabled={submitting || !resolutionNotes.trim()}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-bold hover:from-red-700 hover:to-red-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'جاري التسجيل...' : 'تسجيل الحل'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && selectedReport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100 sticky top-0 bg-white">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black text-gray-800">تفاصيل البلاغ</h2>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Header Info */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`w-4 h-4 rounded-full ${URGENCY_COLORS[selectedReport.urgency]} ${selectedReport.urgency === 'عاجل جداً' ? 'animate-pulse' : ''}`}></span>
+                <span className={`px-3 py-1.5 rounded-full text-sm font-black ${STATUS_COLORS[selectedReport.status]}`}>
+                  {selectedReport.status}
+                </span>
+              </div>
+
+              {/* Family Info */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h3 className="font-black text-gray-800 mb-2">معلومات العائلة</h3>
+                <p className="text-gray-700 font-bold">
+                  {selectedReport.familyName || 'غير متوفر'}
+                </p>
+                {selectedReport.headOfFamilyNationalId && (
+                  <p className="text-sm text-gray-500 font-bold mt-1">
+                    رقم الهوية: {selectedReport.headOfFamilyNationalId}
+                  </p>
+                )}
+              </div>
+
+              {/* Emergency Info */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-black text-gray-800 mb-2">نوع الطوارئ</h3>
+                  <p className="text-gray-700 font-bold">{selectedReport.emergencyType}</p>
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-800 mb-2">درجة الاستعجال</h3>
+                  <p className="text-gray-700 font-bold">{selectedReport.urgency}</p>
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-800 mb-2">التفاصيل</h3>
+                  <p className="text-gray-700 font-bold whitespace-pre-line">{selectedReport.description}</p>
+                </div>
+                {selectedReport.location && (
+                  <div>
+                    <h3 className="font-black text-gray-800 mb-2">الموقع</h3>
+                    <div className="flex items-center gap-2 text-gray-700 font-bold">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      </svg>
+                      <span>{selectedReport.location}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Resolution Section */}
+              {selectedReport.resolutionNotes && (
+                <div className="bg-emerald-50 rounded-xl p-4 border-2 border-emerald-100">
+                  <h3 className="font-black text-emerald-800 mb-2">ملاحظات الحل</h3>
+                  <p className="text-emerald-700 font-bold whitespace-pre-line">{selectedReport.resolutionNotes}</p>
+                  <p className="text-xs text-emerald-600 font-bold mt-2">
+                    تاريخ الحل: {formatDateTime(selectedReport.resolvedAt)}
+                  </p>
+                </div>
+              )}
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500 font-bold">تاريخ الإرسال</p>
+                  <p className="text-gray-700 font-black">{formatDateTime(selectedReport.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 font-bold">آخر تحديث</p>
+                  <p className="text-gray-700 font-black">{formatDateTime(selectedReport.updatedAt)}</p>
+                </div>
+              </div>
+
+              {/* Deleted Info */}
+              {selectedReport.deleted && (
+                <div className="bg-red-50 rounded-xl p-4 border-2 border-red-100">
+                  <p className="text-red-700 font-black mb-2">هذا البلاغ محذوف</p>
+                  <div className="space-y-1 text-sm">
+                    <p className="text-red-600 font-bold">
+                      تاريخ الحذف: {formatDateTime(selectedReport.deletedAt)}
+                    </p>
+                    {selectedReport.restorationReason && (
+                      <p className="text-red-600 font-bold">
+                        سبب الاستعادة: {selectedReport.restorationReason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 sticky bottom-0 bg-white">
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-800">إدارة البلاغات الطارئة</h1>
+          <p className="text-gray-500 font-bold text-sm mt-1">متابعة وحل البلاغات الطارئة</p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition-all disabled:opacity-50 self-start sm:self-auto"
+        >
+          <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span className="hidden sm:inline">{refreshing ? 'جاري التحديث...' : 'تحديث'}</span>
+        </button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-white rounded-2xl border-2 border-red-100 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-600 font-bold text-xs md:text-sm">إجمالي البلاغات</p>
+              <p className="text-2xl md:text-4xl font-black text-gray-800 mt-2">{stats.total}</p>
+            </div>
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-red-100 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border-2 border-red-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-600 font-bold text-xs md:text-sm">عاجل جداً</p>
+              <p className="text-2xl md:text-4xl font-black text-red-700 mt-2">{stats.urgent}</p>
+            </div>
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-red-200 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border-2 border-blue-100 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-600 font-bold text-xs md:text-sm">جديدة</p>
+              <p className="text-2xl md:text-4xl font-black text-blue-700 mt-2">{stats.new}</p>
+            </div>
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border-2 border-emerald-100 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-emerald-600 font-bold text-xs md:text-sm">تم الحل</p>
+              <p className="text-2xl md:text-4xl font-black text-emerald-700 mt-2">{stats.resolved}</p>
+            </div>
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
+        <div className="flex flex-col gap-3">
+          {/* Search */}
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="البحث بالاسم أو النوع أو الموقع..."
+              className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-sm"
+            />
+            <svg className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+
+          {/* Urgency & Status Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-sm font-bold text-gray-700 whitespace-nowrap">الاستعجال:</label>
+              <select
+                value={filterUrgency}
+                onChange={(e) => setFilterUrgency(e.target.value)}
+                className="flex-1 px-3 py-2.5 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-sm"
+              >
+                <option value="all">الكل</option>
+                {URGENCIES.map(urgency => (
+                  <option key={urgency} value={urgency}>{urgency}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-sm font-bold text-gray-700 whitespace-nowrap">الحالة:</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="flex-1 px-3 py-2.5 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-sm"
+              >
+                <option value="all">الكل</option>
+                {STATUSES.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Show Deleted Toggle - SYSTEM_ADMIN only */}
+          {isSystemAdmin && (
+            <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={(e) => setShowDeleted(e.target.checked)}
+                  className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                />
+                <span className="text-sm font-bold text-red-600">إظهار البلاغات المحذوفة</span>
+              </label>
+              {showDeleted && (
+                <span className="text-xs text-red-500 font-bold mr-4">
+                  (عرض {stats.deleted} بلاغ محذوف)
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Reports List */}
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-2xl border-2 border-gray-100 p-4 animate-pulse">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+                <div className="flex-1">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+              <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+            </div>
+          ))}
+        </div>
+      ) : filteredReports.length === 0 ? (
+        <div className="bg-white rounded-2xl border-2 border-gray-100 p-8 text-center">
+          <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-12 h-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <p className="text-gray-600 font-bold text-lg mb-2">
+            {searchQuery ? 'لا توجد بلاغات تطابق بحثك' : 'لا توجد بلاغات طارئة'}
+          </p>
+          <p className="text-gray-500 font-bold text-sm">
+            {searchQuery ? 'جرب تغيير كلمات البحث' : 'ستظهر البلاغات هنا عندما يقوم النازحون بإرسالها'}
+          </p>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="mt-4 px-6 py-2 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 transition-all"
+            >
+              مسح البحث
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {filteredReports.map((report) => {
+            const isDeleted = report.deleted === true;
+            return (
+              <div
+                key={report.id}
+                className={`${
+                  isDeleted 
+                    ? 'bg-red-50 border-2 border-red-200' 
+                    : 'bg-white border-2 border-gray-100'
+                } shadow-sm overflow-hidden hover:shadow-md transition-shadow rounded-2xl`}
+              >
+                <div className="p-4 md:p-5">
+                  {/* Deleted Badge */}
+                  {isDeleted && (
+                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-red-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white text-xs font-black rounded">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        محذوف
+                      </span>
+                      <span className="text-xs text-red-600 font-bold">
+                        {formatDate(report.deletedAt)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Header */}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className={`w-4 h-4 rounded-full ${URGENCY_COLORS[report.urgency]} ${report.urgency === 'عاجل جداً' ? 'animate-pulse' : ''} flex-shrink-0 mt-1.5`}></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className="font-black text-gray-800 text-base md:text-lg truncate">{report.emergencyType}</h3>
+                        <span className={`px-2 py-1 rounded-full text-xs font-black ${STATUS_COLORS[report.status]}`}>
+                          {report.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 font-bold mt-1">
+                        {report.familyName || 'غير متوفر'} • {formatDateTime(report.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className={`text-gray-700 font-bold text-sm mb-3 line-clamp-2 ${isDeleted ? 'text-red-700' : ''}`}>
+                    {report.description}
+                  </p>
+
+                  {/* Location */}
+                  {report.location && (
+                    <div className={`flex items-center gap-2 text-xs font-bold mb-3 rounded-xl p-2 ${isDeleted ? 'bg-red-100 text-red-700' : 'bg-gray-50 text-gray-600'}`}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      </svg>
+                      <span>{report.location}</span>
+                    </div>
+                  )}
+
+                  {/* Resolution Notes */}
+                  {report.resolutionNotes && (
+                    <div className={`rounded-xl p-3 border mb-3 ${
+                      isDeleted ? 'bg-red-100 border-red-200' : 'bg-emerald-50 border-emerald-100'
+                    }`}>
+                      <p className={`text-xs font-black mb-1 ${isDeleted ? 'text-red-800' : 'text-emerald-800'}`}>ملاحظات الحل:</p>
+                      <p className={`text-sm font-bold ${isDeleted ? 'text-red-700' : 'text-emerald-700'}`}>{report.resolutionNotes}</p>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isDeleted ? (
+                      // Restore button for deleted reports
+                      <button
+                        onClick={() => handleRestore(report)}
+                        disabled={submitting || !isSystemAdmin}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all disabled:opacity-50 flex-1 sm:flex-none justify-center"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                        <span>استعادة</span>
+                      </button>
+                    ) : (
+                      // Regular action buttons
+                      <>
+                        <button
+                          onClick={() => {
+                            setSelectedReport(report);
+                            setShowResolutionModal(true);
+                          }}
+                          disabled={report.status === 'تم الحل' || submitting}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all disabled:opacity-50 flex-1 sm:flex-none justify-center"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>تسجيل الحل</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setSelectedReport(report);
+                            setShowDetailsModal(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all flex-1 sm:flex-none justify-center"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span>تفاصيل</span>
+                        </button>
+
+                        {/* Status Dropdown */}
+                        <select
+                          value={report.status}
+                          onChange={(e) => handleStatusChange(report.id, e.target.value)}
+                          className="px-2 py-2 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:outline-none font-bold text-xs bg-white"
+                        >
+                          {STATUSES.map(status => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+
+                        {/* Delete Button */}
+                        <button
+                          onClick={() => handleDelete(report.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all flex-1 sm:flex-none justify-center"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span className="hidden sm:inline">حذف</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default EmergencyReportsManagement;

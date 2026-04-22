@@ -1,0 +1,36 @@
+{
+  "name": "snd-backend",
+  "version": "1.0.0",
+  "description": "Backend API for SND camp management system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate": "node ./migrations/run-migrations.js",
+    "seed:admin": "node seed-admin.js",
+    "verify:admin": "node verify-admin.js",
+    "init:permissions": "node scripts/runInitPermissions.js",
+    "delete:permissions": "node scripts/deletePermissions.js",
+    "test:family": "node test-family-registration.js",
+    "setup:storage": "echo 'Run database/supabase-storage-setup.sql in Supabase SQL Editor'",
+    "setup:db": "echo 'Run database/database_schema_unified_with_if_not_exists.sql in Supabase SQL Editor'"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "jsonwebtoken": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "@supabase/supabase-js": "^2.20.0",
+    "dotenv": "^16.0.3",
+    "joi": "^17.9.2",
+    "http-errors": "^2.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "keywords": ["api", "backend", "jwt", "supabase", "camp-management"],
+  "author": "SND System",
+  "license": "MIT"
+}

@@ -1,0 +1,249 @@
+import React, { useState, useEffect } from 'react';
+import { realDataService } from '../../services/realDataServiceBackend';
+import { Camp } from '../../types';
+import { ICONS } from '../../constants';
+import Toast from '../../components/Toast';
+import ConfirmModal from '../../components/ConfirmModal';
+
+const SystemAdminDashboard = ({ section = 'overview' }: { section?: string }) => {
+  const [camps, setCamps] = useState<Camp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [campToReject, setCampToReject] = useState<Camp | null>(null);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  const loadData = async () => {
+    setRefreshing(true);
+    try {
+      const loadedCamps = await realDataService.getCamps();
+      setCamps(loadedCamps);
+    } catch (err) {
+      console.error("خطأ في جلب البيانات:", err);
+      setToast({ message: "فشل تحميل بيانات المخيمات", type: 'error' });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, [section]);
+
+  const handleApproveCamp = async (camp: Camp) => {
+    try {
+      await realDataService.updateCamp({ ...camp, status: 'active' });
+      setToast({ message: "تم قبول المخيم بنجاح", type: 'success' });
+      loadData();
+    } catch (err) {
+      setToast({ message: "فشل قبول المخيم", type: 'error' });
+    }
+  };
+
+  const handleRejectCamp = async (camp: Camp) => {
+    setCampToReject(camp);
+    setShowRejectConfirm(true);
+  };
+
+  const confirmRejectCamp = async () => {
+    if (!campToReject) return;
+    try {
+      await realDataService.deleteCamp(campToReject.id);
+      setToast({ message: "تم رفض المخيم بنجاح", type: 'success' });
+      setShowRejectConfirm(false);
+      setCampToReject(null);
+      loadData();
+    } catch (err) {
+      setToast({ message: "فشل رفض المخيم", type: 'error' });
+    }
+  };
+
+  const cancelRejectCamp = () => {
+    setShowRejectConfirm(false);
+    setCampToReject(null);
+  };
+
+  const getStatus = (s: string) => s;
+
+  const activeCamps = camps.filter(c => getStatus(c.status) === 'نشط' || getStatus(c.status) === 'ممتلئ');
+  const pendingCamps = camps.filter(c => getStatus(c.status) === 'قيد الانتظار');
+
+  if (loading) return (
+    <div className="space-y-8 animate-in fade-in duration-700">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-white p-6 rounded-[2rem] border-2 border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 w-16 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+              <div className="w-14 h-14 bg-gray-200 rounded-2xl animate-pulse"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-emerald-900 p-8 rounded-[2.5rem] shadow-2xl">
+        <div className="w-12 h-12 bg-white/10 rounded-2xl animate-pulse mb-6"></div>
+        <div className="h-6 w-32 bg-white/20 rounded animate-pulse mb-4"></div>
+        <div className="space-y-2">
+          <div className="h-4 w-full bg-white/10 rounded animate-pulse"></div>
+          <div className="h-4 w-3/4 bg-white/10 rounded animate-pulse"></div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-gray-200 rounded-xl animate-pulse"></div>
+          <div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-gray-50 rounded-2xl p-4 border-2 border-gray-100">
+              <div className="flex items-start justify-between mb-3">
+                <div className="space-y-2">
+                  <div className="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div className="w-16 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+              </div>
+              <div className="space-y-2 mt-3">
+                <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <div className="flex-1 h-9 bg-gray-200 rounded-xl animate-pulse"></div>
+                <div className="flex-1 h-9 bg-gray-200 rounded-xl animate-pulse"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {section === 'overview' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard title="المخيمات النشطة" value={activeCamps.length} color="emerald" icon={<ICONS.Home className="w-6 h-6"/>} />
+            <StatCard title="طلبات الانضمام" value={pendingCamps.length} color="amber" icon={<ICONS.Chart className="w-6 h-6"/>} />
+            <StatCard title="إجمالي السكان" value={activeCamps.reduce((a,b) => a + b.currentPopulation, 0)} color="blue" icon={<ICONS.Users className="w-6 h-6"/>} />
+            <StatCard title="السعة المتاحة" value={activeCamps.reduce((a,b) => a + b.capacity, 0)} color="purple" icon={<ICONS.Inventory className="w-6 h-6"/>} />
+          </div>
+
+          <div className="bg-emerald-900 text-white p-8 rounded-[2.5rem] shadow-2xl">
+            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 text-2xl">💡</div>
+            <h3 className="text-xl font-black mb-4">تنبيه النظام</h3>
+            <p className="text-emerald-100 text-sm leading-relaxed">
+              هناك {pendingCamps.length} مخيمات جديدة بانتظار الموافقة. يرجى مراجعة بياناتهم الجغرافية قبل التفعيل لضمان دقة الخريطة المركزية.
+            </p>
+          </div>
+
+          {pendingCamps.length > 0 && (
+            <div className="bg-white rounded-[2rem] border shadow-sm p-6">
+              <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                طلبات الانضمام المعلقة ({pendingCamps.length})
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {pendingCamps.map(camp => (
+                  <div key={camp.id} className="bg-gray-50 rounded-2xl p-4 border-2 border-gray-100 hover:border-amber-200 transition-all">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-black text-gray-800">{camp.name}</h3>
+                        <p className="text-xs text-gray-500 font-bold mt-1">{camp.managerName}</p>
+                      </div>
+                      <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-black">معلق</span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-600 font-bold">السعة: <span className="font-black">{camp.capacity}</span></p>
+                      <p className="text-gray-600 font-bold">الموقع: <span className="font-black">{camp.location?.address || 'غير محدد'}</span></p>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => handleApproveCamp(camp)}
+                        className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all text-sm"
+                      >
+                        قبول
+                      </button>
+                      <button
+                        onClick={() => handleRejectCamp(camp)}
+                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all text-sm"
+                      >
+                        رفض
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {showRejectConfirm && campToReject && (
+        <ConfirmModal
+          isOpen={showRejectConfirm}
+          onClose={cancelRejectCamp}
+          onConfirm={confirmRejectCamp}
+          title="تأكيد رفض المخيم"
+          message={
+            <div className="space-y-3">
+              <p className="font-bold text-gray-700">
+                هل أنت متأكد من رفض المخيم <span className="text-red-600">"{campToReject.name}"</span>؟
+              </p>
+              <p className="text-sm text-gray-500 font-bold">
+                سيتم حذف هذا المخيم بشكل نهائي من النظام.
+              </p>
+            </div>
+          }
+          confirmText="رفض"
+          cancelText="إلغاء"
+          type="danger"
+          isLoading={false}
+        />
+      )}
+    </div>
+  );
+};
+
+const StatCard = ({ title, value, color, icon }: any) => {
+  const colorMap: any = {
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    amber: 'bg-amber-50 text-amber-600 border-amber-100',
+    purple: 'bg-purple-50 text-purple-600 border-purple-100',
+  };
+  return (
+    <div className={`bg-white p-8 rounded-[2.5rem] border shadow-sm flex justify-between items-center group hover:shadow-xl transition-all duration-500`}>
+      <div>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{title}</p>
+        <p className="text-4xl font-black text-gray-800">{value}</p>
+      </div>
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colorMap[color]} shadow-inner group-hover:scale-110 transition-transform`}>
+        {icon}
+      </div>
+    </div>
+  );
+};
+
+export default SystemAdminDashboard;
