@@ -534,7 +534,85 @@ router.post('/transactions', authenticateToken, async (req, res, next) => {
   }
 });
 
-// Get inventory item by ID - MUST be after /transactions routes
+// Get all inventory items (alias for / endpoint to support /items query) - MUST be before /:itemId route
+router.get('/items', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'inventory', 'read'), async (req, res, next) => {
+  try {
+    console.log('=== GET INVENTORY ITEMS (via /items) ===');
+    console.log('User role:', req.user.role);
+    console.log('User campId:', req.user.campId);
+    console.log('Query params:', req.query);
+    
+    // Check if user wants to include deleted records (admin only) or if we need to include referenced deleted items
+    const { includeDeleted, includeReferencedDeleted, _t } = req.query; // _t is cache-busting timestamp
+    const showDeleted = includeDeleted === 'true' && req.user.role === 'SYSTEM_ADMIN';
+    const showReferencedDeleted = includeReferencedDeleted === 'true';
+
+    let query = supabase.from('inventory_items').select('*');
+
+    // Filter out soft-deleted and inactive records unless explicitly requested
+    if (!showDeleted) {
+      if (showReferencedDeleted) {
+        // Get active campaigns that reference inventory items
+        const { data: activeCampaigns } = await supabase
+          .from('aid_campaigns')
+          .select('inventory_item_id')
+          .is('deleted_at', null)
+          .not('inventory_item_id', 'is', null);
+
+        const referencedItemIds = activeCampaigns
+          ?.map(c => c.inventory_item_id)
+          .filter(id => id !== null) || [];
+
+        // Include active items OR deleted items that are referenced by active campaigns
+        if (referencedItemIds.length > 0) {
+          // Build filter: include items where is_deleted=false OR (is_deleted=true AND id in referencedItemIds)
+          query = query.or(`is_deleted.eq.false,and(is_deleted.eq.true,id.in.(${referencedItemIds.join(',')}))`);
+        } else {
+          query = query.eq('is_deleted', false);
+        }
+        // Still filter by is_active
+        query = query.eq('is_active', true);
+      } else {
+        // Standard behavior: only active, non-deleted items
+        query = query.eq('is_deleted', false).eq('is_active', true);
+      }
+    }
+
+    // Apply filters based on user role
+    if (req.user.role === 'CAMP_MANAGER') {
+      // Limit to inventory items for user's camp
+      console.log('Filtering by camp_id:', req.user.campId);
+      query = query.eq('camp_id', req.user.campId);
+    } else if (req.user.role === 'FIELD_OFFICER') {
+      return res.status(403).json({ error: getMessage('inventory', 'fieldOfficersNoAccess', 'Field officers cannot access inventory') });
+    } else if (req.user.role !== 'SYSTEM_ADMIN') {
+      return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
+    }
+
+    // Apply optional camp filter from query params
+    const { campId } = req.query;
+    if (campId && req.user.role === 'SYSTEM_ADMIN') {
+      query = query.eq('camp_id', campId);
+    }
+
+    // Order by name for consistent display, but Supabase will return fresh data
+    const { data: inventoryItems, error } = await query.order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching inventory items:', error);
+      return res.status(500).json({ error: getDatabaseErrorMessage(error) });
+    }
+
+    console.log('[GET Inventory /items] Found', inventoryItems.length, 'inventory items');
+    
+    res.json(inventoryItems.map(formatInventoryItem));
+  } catch (error) {
+    console.error('Get inventory items error:', error);
+    next(error);
+  }
+});
+
+// Get inventory item by ID - MUST be after /items and /transactions routes
 router.get('/:itemId', authenticateToken, async (req, res, next) => {
   try {
     const { itemId } = req.params;
@@ -818,6 +896,109 @@ router.delete('/:itemId', authenticateToken, async (req, res, next) => {
     });
   } catch (error) {
     console.error('Delete inventory item error:', error);
+    next(error);
+  }
+});
+
+// Get all inventory items (alias for / endpoint to support /items query)
+router.get('/items', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'inventory', 'read'), async (req, res, next) => {
+  try {
+    console.log('=== GET INVENTORY ITEMS (via /items) ===');
+    console.log('User role:', req.user.role);
+    console.log('User campId:', req.user.campId);
+    console.log('Query params:', req.query);
+    
+    // Check if user wants to include deleted records (admin only) or if we need to include referenced deleted items
+    const { includeDeleted, includeReferencedDeleted, _t } = req.query; // _t is cache-busting timestamp
+    const showDeleted = includeDeleted === 'true' && req.user.role === 'SYSTEM_ADMIN';
+    const showReferencedDeleted = includeReferencedDeleted === 'true';
+
+    let query = supabase.from('inventory_items').select('*');
+
+    // Filter out soft-deleted and inactive records unless explicitly requested
+    if (!showDeleted) {
+      if (showReferencedDeleted) {
+        // Get active campaigns that reference inventory items
+        const { data: activeCampaigns } = await supabase
+          .from('aid_campaigns')
+          .select('inventory_item_id')
+          .is('deleted_at', null)
+          .not('inventory_item_id', 'is', null);
+
+        const referencedItemIds = activeCampaigns
+          ?.map(c => c.inventory_item_id)
+          .filter(id => id !== null) || [];
+
+        // Include active items OR deleted items that are referenced by active campaigns
+        if (referencedItemIds.length > 0) {
+          // Build filter: include items where is_deleted=false OR (is_deleted=true AND id in referencedItemIds)
+          query = query.or(`is_deleted.eq.false,and(is_deleted.eq.true,id.in.(${referencedItemIds.join(',')}))`);
+        } else {
+          query = query.eq('is_deleted', false);
+        }
+        // Still filter by is_active
+        query = query.eq('is_active', true);
+      } else {
+        // Standard behavior: only active, non-deleted items
+        query = query.eq('is_deleted', false).eq('is_active', true);
+      }
+    }
+
+    // Apply filters based on user role
+    if (req.user.role === 'CAMP_MANAGER') {
+      // Limit to inventory items for user's camp
+      console.log('Filtering by camp_id:', req.user.campId);
+      query = query.eq('camp_id', req.user.campId);
+    } else if (req.user.role === 'FIELD_OFFICER') {
+      return res.status(403).json({ error: getMessage('inventory', 'fieldOfficersNoAccess', 'Field officers cannot access inventory') });
+    } else if (req.user.role !== 'SYSTEM_ADMIN') {
+      return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
+    }
+
+    // Apply optional camp filter from query params
+    const { campId } = req.query;
+    if (campId && req.user.role === 'SYSTEM_ADMIN') {
+      query = query.eq('camp_id', campId);
+    }
+
+    // Order by name for consistent display, but Supabase will return fresh data
+    const { data: inventoryItems, error } = await query.order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching inventory items:', error);
+      return res.status(500).json({ error: getDatabaseErrorMessage(error) });
+    }
+
+    console.log('[GET Inventory /items] Found', inventoryItems.length, 'inventory items');
+    
+    // Helper function to format inventory item data
+    const formatInventoryItem = (item) => ({
+      id: item.id,
+      campId: item.camp_id,
+      name: item.name,
+      nameAr: item.name,
+      category: item.category,
+      unit: item.unit,
+      unitAr: item.unit,
+      quantityAvailable: item.quantity_available,
+      quantityReserved: item.quantity_reserved,
+      minStock: item.min_stock,
+      maxStock: item.max_stock,
+      minAlertThreshold: item.min_alert_threshold,
+      expiryDate: item.expiry_date,
+      donor: item.donor,
+      receivedDate: item.received_date,
+      notes: item.notes,
+      isActive: item.is_active,
+      isDeleted: item.is_deleted,
+      deletedAt: item.deleted_at,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at
+    });
+
+    res.json(inventoryItems.map(formatInventoryItem));
+  } catch (error) {
+    console.error('Get inventory items error:', error);
     next(error);
   }
 });
