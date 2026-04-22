@@ -170,107 +170,107 @@ export const realDataService = {
       // Don't fail the main operation if logging fails
     }
   },
-  
-async getUsers(): Promise<User[]> {
-  const currentUser = sessionService.getCurrentUser();
-  
-  // CAMP_MANAGER can only get field officers in their camp
-  if (currentUser?.role === Role.CAMP_MANAGER) {
-    return await makeAuthenticatedRequest('/users/camp/field-officers');
-  }
-  
-  // SYSTEM_ADMIN can get all users
-  return await makeAuthenticatedRequest('/users');
-},
 
-async createUser(userData: {
-  email: string;
-  password: string;
-  role: Role;
-  campId?: string;
-  firstName: string;
-  lastName?: string;
-  phoneNumber?: string;
-  isActive?: boolean;
-}): Promise<User> {
-  const currentUser = sessionService.getCurrentUser();
-  
-  // CAMP_MANAGER creates field officers in their camp
-  if (currentUser?.role === Role.CAMP_MANAGER) {
-    return await makeAuthenticatedRequest('/users/camp/field-officer', {
+  async getUsers(): Promise<User[]> {
+    const currentUser = sessionService.getCurrentUser();
+
+    // CAMP_MANAGER can only get field officers in their camp
+    if (currentUser?.role === Role.CAMP_MANAGER) {
+      return await makeAuthenticatedRequest('/users/camp/field-officers');
+    }
+
+    // SYSTEM_ADMIN can get all users
+    return await makeAuthenticatedRequest('/users');
+  },
+
+  async createUser(userData: {
+    email: string;
+    password: string;
+    role: Role;
+    campId?: string;
+    firstName: string;
+    lastName?: string;
+    phoneNumber?: string;
+    isActive?: boolean;
+  }): Promise<User> {
+    const currentUser = sessionService.getCurrentUser();
+
+    // CAMP_MANAGER creates field officers in their camp
+    if (currentUser?.role === Role.CAMP_MANAGER) {
+      return await makeAuthenticatedRequest('/users/camp/field-officer', {
+        method: 'POST',
+        body: JSON.stringify(userData)
+      });
+    }
+
+    // SYSTEM_ADMIN creates any user
+    return await makeAuthenticatedRequest('/users', {
       method: 'POST',
       body: JSON.stringify(userData)
     });
-  }
-  
-  // SYSTEM_ADMIN creates any user
-  return await makeAuthenticatedRequest('/users', {
-    method: 'POST',
-    body: JSON.stringify(userData)
-  });
-},
+  },
 
-async updateUser(userId: string, updates: any): Promise<User> {
-  return await makeAuthenticatedRequest(`/users/${userId}`, {
-    method: 'PUT',
-    body: JSON.stringify(updates)
-  });
-},
+  async updateUser(userId: string, updates: any): Promise<User> {
+    return await makeAuthenticatedRequest(`/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    });
+  },
 
-async deleteUser(userId: string): Promise<void> {
-  await makeAuthenticatedRequest(`/users/${userId}`, { method: 'DELETE' });
-},
+  async deleteUser(userId: string): Promise<void> {
+    await makeAuthenticatedRequest(`/users/${userId}`, { method: 'DELETE' });
+  },
 
-async resetPassword(userId: string, newPassword: string): Promise<any> {
-  return await makeAuthenticatedRequest(`/users/${userId}/reset-password`, {
-    method: 'POST',
-    body: JSON.stringify({ newPassword })
-  });
-},
+  async resetPassword(userId: string, newPassword: string): Promise<any> {
+    return await makeAuthenticatedRequest(`/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword })
+    });
+  },
 
-async getAuditLogs(params: any): Promise<any> {
-  try {
-    const response = await makeAuthenticatedRequest(`/reports/system-operations?${new URLSearchParams(params).toString()}`);
-    
-    // Handle different response formats
-    if (response.data) {
+  async getAuditLogs(params: any): Promise<any> {
+    try {
+      const response = await makeAuthenticatedRequest(`/reports/system-operations?${new URLSearchParams(params).toString()}`);
+
+      // Handle different response formats
+      if (response.data) {
+        return {
+          data: response.data,
+          totalCount: response.pagination?.total || response.totalCount || 0,
+          page: response.pagination?.page || params.page || 1,
+          totalPages: response.pagination?.totalPages || 1
+        };
+      }
+
+      // If response is already an array
       return {
-        data: response.data,
-        totalCount: response.pagination?.total || response.totalCount || 0,
-        page: response.pagination?.page || params.page || 1,
-        totalPages: response.pagination?.totalPages || 1
+        data: Array.isArray(response) ? response : [],
+        totalCount: 0,
+        page: params.page || 1,
+        totalPages: 1
+      };
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      return {
+        data: [],
+        totalCount: 0,
+        page: params.page || 1,
+        totalPages: 1
       };
     }
-    
-    // If response is already an array
-    return {
-      data: Array.isArray(response) ? response : [],
-      totalCount: 0,
-      page: params.page || 1,
-      totalPages: 1
-    };
-  } catch (error) {
-    console.error('Error fetching audit logs:', error);
-    return {
-      data: [],
-      totalCount: 0,
-      page: params.page || 1,
-      totalPages: 1
-    };
-  }
-},
+  },
 
-async createBackup(scope: string, campId?: string, name?: string): Promise<any> {
-  return await makeAuthenticatedRequest('/backup-sync', {
-    method: 'POST',
-    body: JSON.stringify({ scope, camp_id: campId, name })
-  });
-},
+  async createBackup(scope: string, campId?: string, name?: string): Promise<any> {
+    return await makeAuthenticatedRequest('/backup-sync', {
+      method: 'POST',
+      body: JSON.stringify({ scope, camp_id: campId, name })
+    });
+  },
 
-async getBackups(): Promise<any[]> {
-  // Add timestamp to prevent caching
-  return await makeAuthenticatedRequest(`/backup-sync?t=${Date.now()}`);
-},
+  async getBackups(): Promise<any[]> {
+    // Add timestamp to prevent caching
+    return await makeAuthenticatedRequest(`/backup-sync?t=${Date.now()}`);
+  },
 
   // Get all families across all camps (for SYSTEM_ADMIN)
   async getAllDPs(): Promise<DPProfile[]> {
@@ -319,7 +319,7 @@ async getBackups(): Promise<any[]> {
 
       // Backend returns array directly, not wrapped in {data: ...}
       const familyRecords = Array.isArray(response) ? response : (response?.data || []);
-      
+
       console.log('Family records count:', familyRecords?.length || 0);
       if (familyRecords && familyRecords.length > 0) {
         console.log('First family status:', familyRecords[0].status);
@@ -493,11 +493,11 @@ async getBackups(): Promise<any[]> {
           nominationBody: familyRecord.nomination_body || undefined,
           adminNotes: familyRecord.admin_notes || undefined,
           // Ensure status is always consistent with schema (Option B: قيد الانتظار)
-          registrationStatus: 
-            familyRecord.status === 'قيد الانتظار' ? 'قيد الانتظار' : 
-            familyRecord.status === 'موافق' ? 'موافق' : 
-            familyRecord.status === 'مرفوض' ? 'مرفوض' : 
-            'قيد الانتظار',
+          registrationStatus:
+            familyRecord.status === 'قيد الانتظار' ? 'قيد الانتظار' :
+              familyRecord.status === 'موافق' ? 'موافق' :
+                familyRecord.status === 'مرفوض' ? 'مرفوض' :
+                  'قيد الانتظار',
           idCardUrl: familyRecord.id_card_url || undefined,
           medicalReportUrl: familyRecord.medical_report_url || undefined,
           signatureUrl: familyRecord.signature_url || undefined,
@@ -592,10 +592,10 @@ async getBackups(): Promise<any[]> {
         console.error('[getDPById] Error data:', fetchError?.data);
         throw fetchError;
       }
-      
+
       console.log('[getDPById] Family record received:', familyRecord ? familyRecord.head_of_family_name : 'null');
       console.log('[getDPById] Full family record:', JSON.stringify(familyRecord, null, 2));
-      
+
       if (!familyRecord) {
         console.log('[getDPById] No family record found');
         return null;
@@ -752,11 +752,11 @@ async getBackups(): Promise<any[]> {
         nominationBody: familyRecord.nomination_body || undefined,
         adminNotes: familyRecord.admin_notes || undefined,
         // Ensure status is always consistent with schema (Option B: قيد الانتظار)
-        registrationStatus: 
-          familyRecord.status === 'قيد الانتظار' ? 'قيد الانتظار' : 
-          familyRecord.status === 'موافق' ? 'موافق' : 
-          familyRecord.status === 'مرفوض' ? 'مرفوض' : 
-          'قيد الانتظار',
+        registrationStatus:
+          familyRecord.status === 'قيد الانتظار' ? 'قيد الانتظار' :
+            familyRecord.status === 'موافق' ? 'موافق' :
+              familyRecord.status === 'مرفوض' ? 'مرفوض' :
+                'قيد الانتظار',
         idCardUrl: familyRecord.id_card_url || undefined,
         medicalReportUrl: familyRecord.medical_report_url || undefined,
         signatureUrl: familyRecord.signature_url || undefined,
@@ -792,18 +792,18 @@ async getBackups(): Promise<any[]> {
         if (response.status === 404) {
           return null; // Family not found
         }
-        
+
         // Handle 429 Too Many Requests with retry logic
         if (response.status === 429 && retryCount < MAX_RETRIES) {
           const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
           const delay = calculateRetryDelay(retryCount, retryAfter);
-          
+
           console.warn(`[Rate Limit] Hit 429 error. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-          
+
           await sleep(delay);
           return this.lookupFamilyByNationalId(nationalId, retryCount + 1);
         }
-        
+
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `API request failed: ${response.statusText}`);
       }
@@ -886,7 +886,7 @@ async getBackups(): Promise<any[]> {
         wife_medical_followup_frequency: dp.wifeMedicalFollowupFrequency || '',
         wife_medical_followup_details: dp.wifeMedicalFollowupDetails || '',
         wife_disability_type: dp.wifeDisabilityType || 'لا يوجد',
-        wife_disability_severity: dp.wifeDisabilitySeverity || '',
+        wife_disability_severity: dp.wifeDisabilitySeverity || null,
         wife_disability_details: dp.wifeDisabilityDetails || '',
         wife_chronic_disease_type: dp.wifeChronicDiseaseType || 'لا يوجد',
         wife_chronic_disease_details: dp.wifeChronicDiseaseDetails || '',
@@ -902,7 +902,7 @@ async getBackups(): Promise<any[]> {
         husband_medical_followup_frequency: dp.husbandMedicalFollowupFrequency || '',
         husband_medical_followup_details: dp.husbandMedicalFollowupDetails || '',
         husband_disability_type: dp.husbandDisabilityType || 'لا يوجد',
-        husband_disability_severity: dp.husbandDisabilitySeverity || '',
+        husband_disability_severity: dp.husbandDisabilitySeverity || null,
         husband_disability_details: dp.husbandDisabilityDetails || '',
         husband_chronic_disease_type: dp.husbandChronicDiseaseType || 'لا يوجد',
         husband_chronic_disease_details: dp.husbandChronicDiseaseDetails || '',
@@ -952,7 +952,7 @@ async getBackups(): Promise<any[]> {
         // Implement retry logic for 429 errors
         let publicResponse;
         let retryCount = 0;
-        
+
         while (retryCount <= MAX_RETRIES) {
           publicResponse = await fetch(`${BACKEND_API_URL}/public/families`, {
             method: 'POST',
@@ -967,18 +967,18 @@ async getBackups(): Promise<any[]> {
             if (publicResponse.status === 429 && retryCount < MAX_RETRIES) {
               const retryAfter = publicResponse.headers.get('Retry-After') || publicResponse.headers.get('RateLimit-Reset');
               const delay = calculateRetryDelay(retryCount, retryAfter);
-              
+
               console.warn(`[Rate Limit] Hit 429 error on saveDP. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-              
+
               await sleep(delay);
               retryCount++;
               continue;
             }
-            
+
             const errorData = await publicResponse.json().catch(() => ({}));
             throw new Error(errorData.error || `API request failed: ${publicResponse.statusText}`);
           }
-          
+
           break; // Success, exit the retry loop
         }
 
@@ -1001,11 +1001,11 @@ async getBackups(): Promise<any[]> {
 
       // Save/update individuals
       // Filter out duplicates (head of family shouldn't be in individuals)
-      const validMembers = dp.members?.filter(member => 
-        member.name !== dp.headOfFamily && 
+      const validMembers = dp.members?.filter(member =>
+        member.name !== dp.headOfFamily &&
         member.nationalId !== dp.nationalId
       ) || [];
-      
+
       for (const member of validMembers) {
         const individualRecord = {
           family_id: dp.id,
@@ -1056,30 +1056,30 @@ async getBackups(): Promise<any[]> {
         // Implement retry logic for 429 errors
         let response;
         let retryCount = 0;
-        
+
         while (retryCount <= MAX_RETRIES) {
           response = await fetch(`${BACKEND_API_URL}/public/camps`);
-          
+
           if (!response.ok) {
             // Handle 429 Too Many Requests with retry logic
             if (response.status === 429 && retryCount < MAX_RETRIES) {
               const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
               const delay = calculateRetryDelay(retryCount, retryAfter);
-              
+
               console.warn(`[Rate Limit] Hit 429 error on getCamps. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-              
+
               await sleep(delay);
               retryCount++;
               continue;
             }
-            
+
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || `API request failed: ${response.statusText}`);
           }
-          
+
           break; // Success, exit the retry loop
         }
-        
+
         campRecords = await response.json();
       } else {
         campRecords = await makeAuthenticatedRequest('/camps');
@@ -1212,16 +1212,16 @@ async getBackups(): Promise<any[]> {
       // Build query parameters
       let url = '/inventory';
       const queryParams = new URLSearchParams();
-      
+
       queryParams.append('campId', campId);
-      
+
       if (paginationParams) {
         if (paginationParams.page) queryParams.append('page', paginationParams.page.toString());
         if (paginationParams.limit) queryParams.append('limit', paginationParams.limit.toString());
         if (paginationParams.searchQuery) queryParams.append('searchQuery', paginationParams.searchQuery);
         if (paginationParams.sortBy) queryParams.append('sortBy', paginationParams.sortBy);
         if (paginationParams.sortOrder) queryParams.append('sortOrder', paginationParams.sortOrder);
-        
+
         // Add filters
         if (paginationParams.filters) {
           Object.entries(paginationParams.filters).forEach(([key, value]) => {
@@ -1231,13 +1231,13 @@ async getBackups(): Promise<any[]> {
           });
         }
       }
-      
+
       if (queryParams.toString()) {
         url += '?' + queryParams.toString();
       }
-      
+
       const response = await makeAuthenticatedRequest(url);
-      
+
       // The response should now include pagination metadata
       const { data: itemRecords, totalCount, currentPage, totalPages, hasNextPage, hasPrevPage } = response;
 
@@ -2011,7 +2011,7 @@ async getBackups(): Promise<any[]> {
   async bulkUpdateFieldPermissions(familyId: string, permissions: { field: string; editable: boolean }[]): Promise<any> {
     return await makeAuthenticatedRequest(`/families/${familyId}/field-permissions/bulk`, {
       method: 'POST',
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         permissions: permissions.map(p => ({ field_name: p.field, is_editable: p.editable }))
       })
     });
