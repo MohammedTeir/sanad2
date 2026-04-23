@@ -87,9 +87,9 @@ const CampDashboard = ({ section = 'overview' }: { section?: string }) => {
   const [dps, setDps] = useState<DPProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentCampId, setCurrentCampId] = useState<string>('');
+  const [currentCampId, setCurrentCampId] = useState<string>(() => sessionService.getCurrentUser()?.campId || '');
   const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => sessionService.getCurrentUser());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const [dashboardSearchQuery, setDashboardSearchQuery] = useState('');
   
@@ -180,27 +180,13 @@ const CampDashboard = ({ section = 'overview' }: { section?: string }) => {
     currentCampIdRef.current = currentCampId;
   }, [currentCampId]);
 
-  // Load current user's camp ID on mount
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    const currentUser = sessionService.getCurrentUser();
-    if (currentUser?.campId) {
-      setCurrentCampId(currentUser.campId);
-      setCurrentUser(currentUser);
-    } else if (currentUser?.id) {
-      fetchUserInfo(currentUser.id);
-    } else {
-      setToast({ message: 'لم يتم تحديد المخيم. يرجى تسجيل الدخول كمدير مخيم.', type: 'error' });
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchUserInfo = async (userId: string) => {
+  const fetchUserInfo = useCallback(async (userId: string) => {
+    console.log('[CampDashboard] Fetching user info for:', userId);
     try {
       const userInfo = await makeAuthenticatedRequest(`/users/${userId}`);
       if (userInfo?.campId) {
         setCurrentCampId(userInfo.campId);
-        setCurrentUser({ ...currentUser, campId: userInfo.campId });
+        setCurrentUser((prev: any) => ({ ...prev, campId: userInfo.campId }));
       } else {
         setToast({ message: 'لم يتم تحديد المخيم. يرجى التواصل مع مدير المخيم.', type: 'error' });
         setLoading(false);
@@ -210,18 +196,20 @@ const CampDashboard = ({ section = 'overview' }: { section?: string }) => {
       setToast({ message: 'فشل تحميل معلومات المستخدم', type: 'error' });
       setLoading(false);
     }
-  };
+  }, []);
 
   const loadData = useCallback(async (isRefresh = false) => {
+    console.log(`[loadData] Triggered (isRefresh: ${isRefresh})`);
+    
     // Prevent duplicate concurrent calls
     if (isLoadingRef.current) {
-      console.log('[loadData] Skipping duplicate call - already loading');
+      console.log('[loadData] Skipping - already loading');
       return;
     }
 
     // Prevent duplicate initial load (unless camp changed or it's a refresh)
     if (!isRefresh && hasLoadedRef.current && loadedCampIdRef.current === currentCampIdRef.current) {
-      console.log('[loadData] Skipping duplicate initial load');
+      console.log('[loadData] Skipping - already loaded for this camp');
       return;
     }
 
@@ -505,11 +493,33 @@ const CampDashboard = ({ section = 'overview' }: { section?: string }) => {
     }
   };
 
+  // Load current user's camp ID on mount
   useEffect(() => {
-    if (currentCampId) {
+    console.log('[CampDashboard] Mounted');
+    window.scrollTo(0, 0);
+
+    // If we already have a campId (from initialization), just trigger load
+    if (currentCampId && !hasLoadedRef.current && !isLoadingRef.current) {
       loadData();
+    } 
+    // Otherwise check session again just in case initialization was missed
+    else if (!currentCampId && !isLoadingRef.current) {
+      const currentUser = sessionService.getCurrentUser();
+      if (currentUser?.campId) {
+        setCurrentCampId(currentUser.campId);
+        setCurrentUser(currentUser);
+      } else if (currentUser?.id) {
+        fetchUserInfo(currentUser.id);
+      } else {
+        setToast({ message: 'لم يتم تحديد المخيم. يرجى تسجيل الدخول كمدير مخيم.', type: 'error' });
+        setLoading(false);
+      }
     }
-  }, [currentCampId]);
+
+    return () => {
+      console.log('[CampDashboard] Unmounted');
+    };
+  }, [currentCampId, loadData, fetchUserInfo]);
 
   // Real-time refresh every 30 seconds
   useEffect(() => {

@@ -40,6 +40,11 @@ const calculateAgeFromDate = (dateOfBirth: string): number => {
   return age;
 };
 
+// Keep track of in-flight getDPs requests to prevent duplicate calls
+const inFlightDPsRequests = new Map<string, Promise<DPProfile[]>>();
+const dpsCache = new Map<string, { data: DPProfile[], timestamp: number }>();
+const CACHE_DURATION_MS = 2000; // 2 second cache to handle StrictMode/rapid re-mounts
+
 export const realDataService = {
   async init() {
     // Initialization for real data service - verify connection to backend API
@@ -283,87 +288,102 @@ export const realDataService = {
   },
 
   async getDPs(campId?: string, paginationParams?: { page?: number; limit?: number; searchQuery?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; filters?: Record<string, any> }): Promise<DPProfile[]> {
-    await delay(); // Simulate network delay
-    try {
-      // Build query parameters
-      let url = '/families';
-      const queryParams = new URLSearchParams();
+    // Build query parameters immediately to create unique key
+    let url = '/families';
+    const queryParams = new URLSearchParams();
 
-      if (campId) {
-        queryParams.append('campId', campId);
+    if (campId) {
+      queryParams.append('campId', campId);
+    }
+
+    if (paginationParams) {
+      if (paginationParams.page) queryParams.append('page', paginationParams.page.toString());
+      if (paginationParams.limit) queryParams.append('limit', paginationParams.limit.toString());
+      if (paginationParams.searchQuery) queryParams.append('searchQuery', paginationParams.searchQuery);
+      if (paginationParams.sortBy) queryParams.append('sortBy', paginationParams.sortBy);
+      if (paginationParams.sortOrder) queryParams.append('sortOrder', paginationParams.sortOrder);
+
+      // Add filters
+      if (paginationParams.filters) {
+        Object.entries(paginationParams.filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, Array.isArray(value) ? value.join(',') : String(value));
+          }
+        });
       }
+    }
 
-      if (paginationParams) {
-        if (paginationParams.page) queryParams.append('page', paginationParams.page.toString());
-        if (paginationParams.limit) queryParams.append('limit', paginationParams.limit.toString());
-        if (paginationParams.searchQuery) queryParams.append('searchQuery', paginationParams.searchQuery);
-        if (paginationParams.sortBy) queryParams.append('sortBy', paginationParams.sortBy);
-        if (paginationParams.sortOrder) queryParams.append('sortOrder', paginationParams.sortOrder);
+    if (queryParams.toString()) {
+      url += '?' + queryParams.toString();
+    }
 
-        // Add filters
-        if (paginationParams.filters) {
-          Object.entries(paginationParams.filters).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              queryParams.append(key, Array.isArray(value) ? value.join(',') : String(value));
-            }
+    // Check cache first (for StrictMode double-mounts where first request finished)
+    const cached = dpsCache.get(url);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
+      console.log(`[getDPs] Returning cached data for: ${url}`);
+      return cached.data;
+    }
+
+    // Check if there's already an in-flight request for this URL
+    // CRITICAL: Do this BEFORE any await to prevent race conditions
+    if (inFlightDPsRequests.has(url)) {
+      console.log(`[getDPs] Reusing in-flight request for: ${url}`);
+      return inFlightDPsRequests.get(url)!;
+    }
+
+    const requestPromise = (async () => {
+      try {
+        await delay(); // Simulate network delay (moved inside promise)
+        console.log('=== GET DPS ===');
+        console.log('Request URL:', url);
+        console.log('Camp ID:', campId);
+
+        // Use the backend API with JWT authentication
+        const response = await makeAuthenticatedRequest(url);
+        console.log('Response received:', response);
+
+        // Backend returns array directly, not wrapped in {data: ...}
+        const familyRecords = Array.isArray(response) ? response : (response?.data || []);
+
+        console.log('Family records count:', familyRecords?.length || 0);
+        if (familyRecords && familyRecords.length > 0) {
+          console.log('First family status:', familyRecords[0].status);
+          console.log('Status distribution:', {
+            pending: familyRecords.filter((f: any) => f.status === 'قيد الانتظار').length,
+            approved: familyRecords.filter((f: any) => f.status === 'موافق').length,
+            rejected: familyRecords.filter((f: any) => f.status === 'مرفوض').length
           });
         }
-      }
 
-      if (queryParams.toString()) {
-        url += '?' + queryParams.toString();
-      }
+        // Extract all family IDs for bulk individuals fetch
+        const familyIds = familyRecords.map((f: any) => f.id);
 
-      console.log('=== GET DPS ===');
-      console.log('Request URL:', url);
-      console.log('Camp ID:', campId);
-
-      // Use the backend API with JWT authentication
-      const response = await makeAuthenticatedRequest(url);
-      console.log('Response received:', response);
-
-      // Backend returns array directly, not wrapped in {data: ...}
-      const familyRecords = Array.isArray(response) ? response : (response?.data || []);
-
-      console.log('Family records count:', familyRecords?.length || 0);
-      if (familyRecords && familyRecords.length > 0) {
-        console.log('First family status:', familyRecords[0].status);
-        console.log('Status distribution:', {
-          pending: familyRecords.filter((f: any) => f.status === 'قيد الانتظار').length,
-          approved: familyRecords.filter((f: any) => f.status === 'موافق').length,
-          rejected: familyRecords.filter((f: any) => f.status === 'مرفوض').length
-        });
-      }
-
-      // Extract all family IDs for bulk individuals fetch
-      const familyIds = familyRecords.map((f: any) => f.id);
-
-      // Fetch ALL individuals in ONE bulk call (solves N+1 query problem)
-      let allIndividuals: any[] = [];
-      if (familyIds.length > 0) {
-        allIndividuals = await makeAuthenticatedRequest('/individuals/bulk', {
-          method: 'POST',
-          body: JSON.stringify({ familyIds })
-        });
-      }
-
-      // Group individuals by family_id for quick lookup
-      const individualsByFamily: Record<string, any[]> = {};
-      allIndividuals.forEach((ind: any) => {
-        if (!individualsByFamily[ind.family_id]) {
-          individualsByFamily[ind.family_id] = [];
+        // Fetch ALL individuals in ONE bulk call (solves N+1 query problem)
+        let allIndividuals: any[] = [];
+        if (familyIds.length > 0) {
+          allIndividuals = await makeAuthenticatedRequest('/individuals/bulk', {
+            method: 'POST',
+            body: JSON.stringify({ familyIds })
+          });
         }
-        individualsByFamily[ind.family_id].push(ind);
-      });
 
-      console.log('Total individuals fetched:', allIndividuals.length);
-      console.log('Families with individuals:', Object.keys(individualsByFamily).length);
+        // Group individuals by family_id for quick lookup
+        const individualsByFamily: Record<string, any[]> = {};
+        allIndividuals.forEach((ind: any) => {
+          if (!individualsByFamily[ind.family_id]) {
+            individualsByFamily[ind.family_id] = [];
+          }
+          individualsByFamily[ind.family_id].push(ind);
+        });
 
-      const dps: DPProfile[] = [];
+        console.log('Total individuals fetched:', allIndividuals.length);
+        console.log('Families with individuals:', Object.keys(individualsByFamily).length);
 
-      for (const familyRecord of familyRecords) {
-        // Get individuals for this family from pre-fetched data
-        const individualRecords = individualsByFamily[familyRecord.id] || [];
+        const dps: DPProfile[] = [];
+
+        for (const familyRecord of familyRecords) {
+          // Get individuals for this family from pre-fetched data
+          const individualRecords = individualsByFamily[familyRecord.id] || [];
 
         const dp: DPProfile = {
           id: familyRecord.id,
@@ -533,16 +553,23 @@ export const realDataService = {
         dps.push(dp);
       }
 
-      console.log('Total DPS mapped:', dps.length);
-      console.log('DPS with pending status:', dps.filter(d => d.registrationStatus === 'قيد الانتظار').length);
+        console.log('Total DPS mapped:', dps.length);
+        console.log('DPS with pending status:', dps.filter(d => d.registrationStatus === 'قيد الانتظار').length);
 
-      // Note: Sorting is now handled server-side, so we don't need to sort here
-      return dps || [];
-    } catch (error) {
-      console.warn('Warning: Error fetching DPs from backend API, returning empty array:', error);
-      // Return empty array instead of throwing, allowing graceful degradation
-      return [];
-    }
+        const result = dps || [];
+        dpsCache.set(url, { data: result, timestamp: Date.now() });
+        return result;
+      } catch (error: any) {
+        console.error('Error fetching DPs from backend:', error);
+        // Return empty array instead of throwing, allowing graceful degradation
+        return [];
+      } finally {
+        inFlightDPsRequests.delete(url);
+      }
+    })();
+
+    inFlightDPsRequests.set(url, requestPromise);
+    return requestPromise;
   },
 
   async createDP(familyData: any): Promise<any> {

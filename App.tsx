@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { Role } from './types';
 import { ICONS } from './constants';
@@ -253,6 +253,7 @@ export default function App() {
 
   // Logout confirmation modal
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const checkedUserRef = useRef<string | null>(null);
 
   const handleLogin = (role: Role, id?: string) => {
     setUser({ role, id });
@@ -358,7 +359,14 @@ export default function App() {
   // Trigger camp status check when user state updates
   useEffect(() => {
     if (user && user.role === Role.CAMP_MANAGER) {
-      checkCampStatus(user);
+      // Only check if we haven't checked for this specific user yet
+      const userKey = `${user.id}-${user.role}`;
+      if (checkedUserRef.current !== userKey) {
+        checkedUserRef.current = userKey;
+        checkCampStatus(user);
+      }
+    } else if (!user) {
+      checkedUserRef.current = null;
     }
   }, [user, checkCampStatus]);
 

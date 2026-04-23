@@ -810,10 +810,6 @@ const DPManagement: React.FC = () => {
             <p className="text-3xl font-black text-pink-600">{stats.female}</p>
             <p className="text-xs font-bold text-pink-700 mt-1">رب أسرة أنثى</p>
           </div>
-          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-3xl font-black text-red-600">{stats.highVulnerability}</p>
-            <p className="text-xs font-bold text-red-700 mt-1">هشاشة عالية</p>
-          </div>
           <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-4 text-center shadow-sm">
             <p className="text-3xl font-black text-amber-600">{stats.pending}</p>
             <p className="text-xs font-bold text-amber-700 mt-1">قيد الانتظار</p>
@@ -1268,7 +1264,6 @@ const DPManagement: React.FC = () => {
             ...(filterGovernorate !== 'all' ? [{ id: 'governorate', label: `المحافظة: ${filterGovernorate}`, value: filterGovernorate, onRemove: () => setFilterGovernorate('all') }] : []),
             ...(filterRegion !== 'all' ? [{ id: 'region', label: `المنطقة: ${filterRegion}`, value: filterRegion, onRemove: () => setFilterRegion('all') }] : []),
             ...(filterStatus !== 'all' ? [{ id: 'status', label: `حالة التسجيل: ${filterStatus}`, value: filterStatus, onRemove: () => setFilterStatus('all') }] : []),
-            ...(filterVulnerabilityPriority.length > 0 ? [{ id: 'vulnerability', label: `مستوى الهشاشة: ${filterVulnerabilityPriority.map(p => VULNERABILITY_LEVELS.find(v => v.value === p)?.label).join('، ')}`, value: 'vulnerability', onRemove: () => setFilterVulnerabilityPriority([]) }] : []),
             ...(filterFamilySizeMin || filterFamilySizeMax ? [{ id: 'familySize', label: `حجم الأسرة: ${filterFamilySizeMin || '0'}-${filterFamilySizeMax || '∞'}`, value: 'familySize', onRemove: () => { setFilterFamilySizeMin(''); setFilterFamilySizeMax(''); } }] : [])
           ]}
           onClearAll={() => {
@@ -1368,62 +1363,6 @@ const DPManagement: React.FC = () => {
                 />
               </div>
             </div>
-
-            {/* Comprehensive Vulnerability Filters Section */}
-            <div className="lg:col-span-3 mt-6 mb-2">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-purple-200 text-purple-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-lg font-black text-gray-800">معايير الهشاشة المتقدمة (11 معيار)</h4>
-                  <p className="text-xs text-gray-500 font-bold mt-0.5">فلاتر مخصصة لكل معيار حسب النوع والبيانات المتاحة</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Vulnerability Priority & Score - ⚠️  DISABLED: Vulnerability score system disabled */}
-            {/* <div className="md:col-span-2">
-              <MultiSelectFilter
-                label="مستوى الهشاشة"
-                options={VULNERABILITY_LEVELS}
-                value={filterVulnerabilityPriority}
-                onChange={setFilterVulnerabilityPriority}
-                placeholder="اختر مستويات الهشاشة..."
-                iconColor="purple"
-                searchable
-              />
-            </div> */}
-
-            {/* ⚠️  DISABLED: Vulnerability score filters - Vulnerability score system disabled */}
-            {/* <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-black text-gray-700 mb-2">درجة الهشاشة (من)</label>
-                <input
-                  type="number"
-                  value={filterVulnerabilityScoreMin}
-                  onChange={(e) => setFilterVulnerabilityScoreMin(e.target.value)}
-                  placeholder="0"
-                  min="0"
-                  max="100"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-black text-gray-700 mb-2">درجة الهشاشة (إلى)</label>
-                <input
-                  type="number"
-                  value={filterVulnerabilityScoreMax}
-                  onChange={(e) => setFilterVulnerabilityScoreMax(e.target.value)}
-                  placeholder="100"
-                  min="0"
-                  max="100"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all font-bold"
-                />
-              </div>
-            </div> */}
 
             {/* Children Filter */}
             <div className="grid grid-cols-2 gap-2 md:col-span-2">
@@ -1720,14 +1659,6 @@ const DPManagement: React.FC = () => {
                     <p className="font-black text-gray-700 text-sm">{dp.totalMembersCount}</p>
                   </div>
 
-                  {/* Vulnerability */}
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-500 font-bold mb-1">الهشاشة</p>
-                    <span className={`inline-block px-2 py-1 rounded-lg font-black text-xs border-2 ${VULNERABILITY_LEVELS.find(v => v.value === dp.vulnerabilityPriority)?.color || 'bg-gray-100 text-gray-700'}`}>
-                      {dp.vulnerabilityPriority || '-'}
-                    </span>
-                  </div>
-
                   {/* Phone */}
                   <div className="bg-gray-50 rounded-xl p-3">
                     <p className="text-xs text-gray-500 font-bold mb-1">الهاتف</p>
@@ -1830,7 +1761,6 @@ const DPManagement: React.FC = () => {
                 <th className="px-6 py-4 text-center text-sm font-black text-gray-700 whitespace-nowrap">الجنس</th>
                 <th className="px-6 py-4 text-center text-sm font-black text-gray-700 whitespace-nowrap">الحالة</th>
                 <th className="px-6 py-4 text-center text-sm font-black text-gray-700 whitespace-nowrap">الأفراد</th>
-                <th className="px-6 py-4 text-right text-sm font-black text-gray-700 whitespace-nowrap">الهشاشة</th>
                 <th className="px-6 py-4 text-right text-sm font-black text-gray-700 whitespace-nowrap">الهاتف</th>
                 <th className="px-6 py-4 text-center text-sm font-black text-gray-700 whitespace-nowrap">الوحدة</th>
                 <th className="px-6 py-4 text-center text-sm font-black text-gray-700 whitespace-nowrap">التسجيل</th>
@@ -1840,7 +1770,7 @@ const DPManagement: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {currentDPs.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-4">
                       <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400 rounded-full flex items-center justify-center">
                         <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1875,11 +1805,6 @@ const DPManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <p className="font-black text-gray-700 text-base">{dp.totalMembersCount}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-block px-3 py-1 rounded-full font-black text-xs border-2 ${VULNERABILITY_LEVELS.find(v => v.value === dp.vulnerabilityPriority)?.color || 'bg-gray-100 text-gray-700'}`}>
-                        {dp.vulnerabilityPriority || '-'}
-                      </span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <p className="text-sm font-bold text-gray-700" dir="ltr">{dp.phoneNumber}</p>
