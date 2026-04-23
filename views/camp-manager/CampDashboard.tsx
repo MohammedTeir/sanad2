@@ -266,8 +266,9 @@ const CampDashboard = ({ section = 'overview' }: { section?: string }) => {
       ] = await Promise.all([
         realDataService.getDPs(campIdToUse),
         makeAuthenticatedRequest('/camps/my-camp').catch(() => null),
+        makeAuthenticatedRequest(`/transfers?campId=${campIdToUse}`).catch(() => []),
         makeAuthenticatedRequest(`/aid/campaigns?campId=${campIdToUse}`).catch(() => []),
-        makeAuthenticatedRequest(`/inventory/items?campId=${campIdToUse}`).catch(() => []),
+        makeAuthenticatedRequest(`/inventory?campId=${campIdToUse}`).catch(() => []),
         makeAuthenticatedRequest(`/users/camp/field-officers`).catch(() => []),
         makeAuthenticatedRequest(`/aid/distributions?campId=${campIdToUse}`).catch(() => [])
       ]);
