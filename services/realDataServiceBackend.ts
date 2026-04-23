@@ -1541,10 +1541,11 @@ export const realDataService = {
   },
 
   // Inventory Items Management
-  async getInventoryItems(includeReferencedDeleted = false, cacheBustTimestamp?: number): Promise<any[]> {
+  async getInventoryItems(includeReferencedDeleted = false, cacheBustTimestamp?: number, isActive?: boolean): Promise<any[]> {
     console.log('=== GET INVENTORY ITEMS (SERVICE) ===');
     const cacheParam = cacheBustTimestamp ? `&_t=${cacheBustTimestamp}` : '';
-    const response = await makeAuthenticatedRequest(`/inventory?includeReferencedDeleted=${includeReferencedDeleted}${cacheParam}`);
+    const activeParam = isActive !== undefined ? `&isActive=${isActive}` : '';
+    const response = await makeAuthenticatedRequest(`/inventory?includeReferencedDeleted=${includeReferencedDeleted}${cacheParam}${activeParam}`);
     console.log('Inventory response:', response);
     return response || [];
   },
@@ -1954,11 +1955,9 @@ export const realDataService = {
    * Restore a soft-deleted inventory item
    */
   async restoreInventoryItem(id: string, reason: string): Promise<any> {
-    return await makeAuthenticatedRequest('/soft-deletes/restore', {
-      method: 'POST',
+    return await makeAuthenticatedRequest(`/inventory/${id}/restore`, {
+      method: 'PUT',
       body: JSON.stringify({
-        table_name: 'inventory_items',
-        record_id: id,
         reason: reason
       })
     });
