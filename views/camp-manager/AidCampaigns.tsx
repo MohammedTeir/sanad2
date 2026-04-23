@@ -206,48 +206,48 @@ const AidCampaigns: React.FC = () => {
   const [filterFamiliesBenefitCount, setFilterFamiliesBenefitCount] = useState<'all' | 'حملة واحدة' | 'حملات متعددة'>('all'); // single or multiple campaigns
   const [filterFamilySizeMin, setFilterFamilySizeMin] = useState<string>('');
   const [filterFamilySizeMax, setFilterFamilySizeMax] = useState<string>('');
-  
+
   // Vulnerability filters - Priority Levels
   const [filterVulnerabilityPriority, setFilterVulnerabilityPriority] = useState<string[]>([]); // Multi-select: very_high, high, medium, low
   const [filterVulnerabilityScoreMin, setFilterVulnerabilityScoreMin] = useState<string>('');
   const [filterVulnerabilityScoreMax, setFilterVulnerabilityScoreMax] = useState<string>('');
-  
+
   // Children filter (count + age range)
   const [filterChildCountMin, setFilterChildCountMin] = useState<string>('');
   const [filterChildCountMax, setFilterChildCountMax] = useState<string>('');
-  
+
   // Seniors filter (count + age range)
   const [filterSeniorCountMin, setFilterSeniorCountMin] = useState<string>('');
   const [filterSeniorCountMax, setFilterSeniorCountMax] = useState<string>('');
-  
+
   // Disability filter (type + severity)
   const [filterHasDisability, setFilterHasDisability] = useState<boolean | null>(null); // Yes/No
   const [filterDisabilityType, setFilterDisabilityType] = useState<string[]>([]); // Multi-select: physical, visual, hearing, speech, mental, other
-  
+
   // Chronic disease filter (type)
   const [filterHasChronicDisease, setFilterHasChronicDisease] = useState<boolean | null>(null); // Yes/No
   const [filterChronicDiseaseType, setFilterChronicDiseaseType] = useState<string[]>([]); // Multi-select: diabetes, hypertension, cancer, kidney_failure, heart, respiratory, other
-  
+
   // War injury filter (type + severity)
   const [filterHasWarInjury, setFilterHasWarInjury] = useState<boolean | null>(null); // Yes/No
   const [filterWarInjuryType, setFilterWarInjuryType] = useState<string[]>([]); // Multi-select: amputation, head_face, spinal, other
-  
+
   // Pregnancy filter (yes/no + month range)
   const [filterHasPregnancy, setFilterHasPregnancy] = useState<boolean | null>(null);
   const [filterPregnancyMonthMin, setFilterPregnancyMonthMin] = useState<string>(''); // 1-9
-  
+
   // Income filter (range)
   const [filterIncomeMin, setFilterIncomeMin] = useState<string>('');
   const [filterIncomeMax, setFilterIncomeMax] = useState<string>('');
-  
+
   // Housing filter (type + conditions)
   const [filterHousingType, setFilterHousingType] = useState<string[]>([]); // Multi-select: tent, concrete_house, apartment, shared, other
   const [filterHasPoorSanitary, setFilterHasPoorSanitary] = useState<boolean | null>(null); // Yes/No
-  
+
   // Orphans filter (count)
   const [filterOrphanCountMin, setFilterOrphanCountMin] = useState<string>('');
   const [filterOrphanCountMax, setFilterOrphanCountMax] = useState<string>('');
-  
+
   // Absence of provider (marital status + employment)
   const [filterMaritalStatus, setFilterMaritalStatus] = useState<string[]>([]); // Multi-select: widow, divorced, vulnerable
   const [filterIsEmployed, setFilterIsEmployed] = useState<boolean | null>(null); // Yes/No
@@ -277,7 +277,7 @@ const AidCampaigns: React.FC = () => {
       'shelter': 'مأوى',
       'other': 'أخرى'
     };
-    
+
     // If it's English, map to Arabic
     if (englishToArabic[category]) {
       return englishToArabic[category];
@@ -297,7 +297,7 @@ const AidCampaigns: React.FC = () => {
       'shelter': 'مأوى',
       'other': 'أخرى'
     };
-    
+
     // If it's a known English value, return Arabic label
     if (englishToArabic[categoryValue]) {
       return englishToArabic[categoryValue];
@@ -310,7 +310,7 @@ const AidCampaigns: React.FC = () => {
   useEffect(() => {
     // Scroll to top when page loads
     window.scrollTo(0, 0);
-    
+
     const currentUser = sessionService.getCurrentUser();
     if (currentUser?.campId) {
       setCurrentCampId(currentUser.campId);
@@ -336,7 +336,7 @@ const AidCampaigns: React.FC = () => {
         let individualsDisabilityCount = 0;
         let individualsChronicCount = 0;
         let individualsWarInjuryCount = 0;
-        
+
         // Head of family
         if (f.headOfFamilyDisabilityType && f.headOfFamilyDisabilityType !== 'none' && f.headOfFamilyDisabilityType !== 'لا يوجد') {
           disabilityTypes.push(mapDisabilityType(f.headOfFamilyDisabilityType) || 'other');
@@ -364,7 +364,7 @@ const AidCampaigns: React.FC = () => {
           warInjuryTypes.push(mapWarInjuryType(f.wifeWarInjuryType) || 'other');
           individualsWarInjuryCount++;
         }
-        
+
         // Other individuals (if members array exists)
         if (f.members && Array.isArray(f.members)) {
           f.members.forEach(member => {
@@ -443,7 +443,7 @@ const AidCampaigns: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
   // Helper functions to map types
   const mapDisabilityType = (type: string | null): 'جسدية' | 'بصرية' | 'سمعية' | 'نطق' | 'عقلية' | 'أخرى' | undefined => {
     if (!type || type === 'none' || type === 'لا يوجد') return undefined;
@@ -528,7 +528,7 @@ const AidCampaigns: React.FC = () => {
   // Load inventory items (include deleted items that are referenced by active campaigns)
   const loadInventoryItems = useCallback(async () => {
     try {
-      const items = await realDataService.getInventoryItems(true); // includeReferencedDeleted = true
+      const items = await realDataService.getInventoryItems(true, undefined, true); // includeReferencedDeleted = true, isActive = true (only show active items)
       console.log('[AidCampaigns] Loaded inventory items:', items);
       setInventoryItems(items);
     } catch (err: any) {
@@ -551,8 +551,8 @@ const AidCampaigns: React.FC = () => {
   };
 
   const handleFamilyToggle = (familyId: string) => {
-    setSelectedFamilyIds(prev => 
-      prev.includes(familyId) 
+    setSelectedFamilyIds(prev =>
+      prev.includes(familyId)
         ? prev.filter(id => id !== familyId)
         : [...prev, familyId]
     );
@@ -668,18 +668,18 @@ const AidCampaigns: React.FC = () => {
     if (!deletingCampaign) return;
 
     console.log('[AidCampaigns] Confirming delete for campaign:', deletingCampaign.id, deletingCampaign.name);
-    
+
     try {
       console.log('[AidCampaigns] Calling deleteAidCampaign API...');
       await realDataService.deleteAidCampaign(deletingCampaign.id);
       console.log('[AidCampaigns] Delete API call succeeded');
-      
+
       setToast({ message: 'تم حذف الحملة بنجاح', type: 'success' });
-      
+
       console.log('[AidCampaigns] Reloading campaigns...');
       await loadCampaigns();
       console.log('[AidCampaigns] Campaigns reloaded');
-      
+
       setDeletingCampaign(null);
     } catch (err: any) {
       console.error('[AidCampaigns] Error deleting campaign:', err);
@@ -708,11 +708,11 @@ const AidCampaigns: React.FC = () => {
 
   const filteredFamilies = families.filter(family => {
     // Basic search filter with Arabic normalization
-    const matchesSearch = !familySearchTerm || 
+    const matchesSearch = !familySearchTerm ||
       normalizeArabic(family.head_of_family_name).includes(normalizeArabic(familySearchTerm));
 
     // Family size range filter
-    const matchesFamilySize = 
+    const matchesFamilySize =
       (filterFamilySizeMin === '' || family.total_members_count >= parseInt(filterFamilySizeMin)) &&
       (filterFamilySizeMax === '' || family.total_members_count <= parseInt(filterFamilySizeMax));
 
@@ -720,7 +720,7 @@ const AidCampaigns: React.FC = () => {
     const familyScore = parseFloat(String(family.vulnerabilityScore || 0));
     const minScore = filterVulnerabilityScoreMin ? parseFloat(filterVulnerabilityScoreMin) : 0;
     const maxScore = filterVulnerabilityScoreMax ? parseFloat(filterVulnerabilityScoreMax) : 100;
-    
+
     const matchesVulnerabilityScore = familyScore >= minScore && familyScore <= maxScore;
 
     // Debug: Log score range matching
@@ -753,65 +753,65 @@ const AidCampaigns: React.FC = () => {
     }
 
     // Children count filter
-    const matchesChildCount = 
+    const matchesChildCount =
       (filterChildCountMin === '' || (family.childCount || 0) >= parseInt(filterChildCountMin)) &&
       (filterChildCountMax === '' || (family.childCount || 0) <= parseInt(filterChildCountMax));
-    
+
     // Seniors count filter
-    const matchesSeniorCount = 
+    const matchesSeniorCount =
       (filterSeniorCountMin === '' || (family.seniorCount || 0) >= parseInt(filterSeniorCountMin)) &&
       (filterSeniorCountMax === '' || (family.seniorCount || 0) <= parseInt(filterSeniorCountMax));
-    
+
     // Disability filter (Yes/No + type) - includes head, wife, and all individuals
-    const matchesDisability = 
-      (filterHasDisability === null || 
+    const matchesDisability =
+      (filterHasDisability === null ||
         (filterHasDisability ? family.hasDisability : !family.hasDisability)) &&
-      (filterDisabilityType.length === 0 || 
+      (filterDisabilityType.length === 0 ||
         (family.disabilityTypes && family.disabilityTypes.some(t => filterDisabilityType.includes(t as any))));
-    
+
     // Chronic disease filter (Yes/No + type) - includes head, wife, and all individuals
-    const matchesChronicDisease = 
-      (filterHasChronicDisease === null || 
+    const matchesChronicDisease =
+      (filterHasChronicDisease === null ||
         (filterHasChronicDisease ? family.hasChronicDisease : !family.hasChronicDisease)) &&
-      (filterChronicDiseaseType.length === 0 || 
+      (filterChronicDiseaseType.length === 0 ||
         (family.chronicDiseaseTypes && family.chronicDiseaseTypes.some(t => filterChronicDiseaseType.includes(t as any))));
-    
+
     // War injury filter (Yes/No + type) - includes head, wife, and all individuals
-    const matchesWarInjury = 
-      (filterHasWarInjury === null || 
+    const matchesWarInjury =
+      (filterHasWarInjury === null ||
         (filterHasWarInjury ? family.hasWarInjury : !family.hasWarInjury)) &&
-      (filterWarInjuryType.length === 0 || 
+      (filterWarInjuryType.length === 0 ||
         (family.warInjuryTypes && family.warInjuryTypes.some(t => filterWarInjuryType.includes(t as any))));
-    
+
     // Pregnancy filter (Yes/No + month)
-    const matchesPregnancy = 
-      (filterHasPregnancy === null || 
+    const matchesPregnancy =
+      (filterHasPregnancy === null ||
         (filterHasPregnancy ? family.hasPregnancy : !family.hasPregnancy)) &&
-      (filterPregnancyMonthMin === '' || 
+      (filterPregnancyMonthMin === '' ||
         (family.pregnancyMonth || 0) >= parseInt(filterPregnancyMonthMin));
-    
+
     // Income range filter
-    const matchesIncome = 
+    const matchesIncome =
       (filterIncomeMin === '' || (family.monthlyIncome || 0) >= parseInt(filterIncomeMin)) &&
       (filterIncomeMax === '' || (family.monthlyIncome || 999999) <= parseInt(filterIncomeMax));
-    
+
     // Housing filter (type + sanitary)
-    const matchesHousing = 
-      (filterHousingType.length === 0 || 
+    const matchesHousing =
+      (filterHousingType.length === 0 ||
         (family.housingType && filterHousingType.includes(family.housingType))) &&
-      (filterHasPoorSanitary === null || 
+      (filterHasPoorSanitary === null ||
         (filterHasPoorSanitary ? family.hasPoorSanitary : !family.hasPoorSanitary));
-    
+
     // Orphan count filter
-    const matchesOrphanCount = 
+    const matchesOrphanCount =
       (filterOrphanCountMin === '' || (family.orphanCount || 0) >= parseInt(filterOrphanCountMin)) &&
       (filterOrphanCountMax === '' || (family.orphanCount || 0) <= parseInt(filterOrphanCountMax));
-    
+
     // Absence of provider filter (marital status + employment)
-    const matchesAbsenceProvider = 
-      (filterMaritalStatus.length === 0 || 
+    const matchesAbsenceProvider =
+      (filterMaritalStatus.length === 0 ||
         (family.maritalStatus && filterMaritalStatus.includes(family.maritalStatus))) &&
-      (filterIsEmployed === null || 
+      (filterIsEmployed === null ||
         (filterIsEmployed ? family.isEmployed : !family.isEmployed));
 
     // Aid inclusion/exclusion filter - check distributedTo (received aid), not targetFamilies
@@ -880,10 +880,10 @@ const AidCampaigns: React.FC = () => {
     }
 
     return matchesSearch && matchesFamilySize && matchesVulnerabilityScore && matchesVulnerabilityPriority &&
-           matchesChildCount && matchesSeniorCount && matchesDisability && matchesChronicDisease &&
-           matchesWarInjury && matchesPregnancy && matchesIncome && matchesHousing &&
-           matchesOrphanCount && matchesAbsenceProvider &&
-           matchesAidFilter && matchesCampaignStatus && matchesAidCategory && matchesBenefitCount;
+      matchesChildCount && matchesSeniorCount && matchesDisability && matchesChronicDisease &&
+      matchesWarInjury && matchesPregnancy && matchesIncome && matchesHousing &&
+      matchesOrphanCount && matchesAbsenceProvider &&
+      matchesAidFilter && matchesCampaignStatus && matchesAidCategory && matchesBenefitCount;
   });
 
   const filteredCampaigns = campaigns.filter(campaign => {
@@ -914,7 +914,7 @@ const AidCampaigns: React.FC = () => {
       campaign.inventoryItemId === filterInventoryItem;
 
     return matchesSearch && matchesStatus && matchesCategory &&
-           matchesStartDate && matchesEndDate && matchesInventoryItem;
+      matchesStartDate && matchesEndDate && matchesInventoryItem;
   });
 
   const stats = {
@@ -1153,22 +1153,20 @@ const AidCampaigns: React.FC = () => {
                     </select>
                     {/* Debug: Show form data */}
                     {formData.inventoryItemId && (
-                      <div className={`mt-2 p-3 border-2 rounded-xl ${
-                        (() => {
+                      <div className={`mt-2 p-3 border-2 rounded-xl ${(() => {
+                        const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
+                        return selectedItem?.isDeleted || selectedItem?.deletedAt
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-emerald-50 border-emerald-200';
+                      })()
+                        }`}>
+                        <div className={`flex items-center gap-2 text-sm font-bold ${(() => {
                           const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
                           return selectedItem?.isDeleted || selectedItem?.deletedAt
-                            ? 'bg-red-50 border-red-200'
-                            : 'bg-emerald-50 border-emerald-200';
+                            ? 'text-red-800'
+                            : 'text-emerald-800';
                         })()
-                      }`}>
-                        <div className={`flex items-center gap-2 text-sm font-bold ${
-                          (() => {
-                            const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
-                            return selectedItem?.isDeleted || selectedItem?.deletedAt
-                              ? 'text-red-800'
-                              : 'text-emerald-800';
-                          })()
-                        }`}>
+                          }`}>
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
@@ -1189,34 +1187,30 @@ const AidCampaigns: React.FC = () => {
                             const itemQty = selectedItem?.quantity_available ?? selectedItem?.quantityAvailable ?? 0;
                             return (
                               <>
-                                <span className={`px-2 py-1 rounded-lg ${
-                                  selectedItem?.isDeleted || selectedItem?.deletedAt
-                                    ? 'bg-white text-red-700'
-                                    : 'bg-white text-emerald-700'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-lg ${selectedItem?.isDeleted || selectedItem?.deletedAt
+                                  ? 'bg-white text-red-700'
+                                  : 'bg-white text-emerald-700'
+                                  }`}>
                                   الاسم: <span className="font-black">{itemName}</span>
                                 </span>
                                 {itemUnit && (
-                                  <span className={`px-2 py-1 rounded-lg ${
-                                    selectedItem?.isDeleted || selectedItem?.deletedAt
-                                      ? 'bg-white text-red-700'
-                                      : 'bg-white text-emerald-700'
-                                  }`}>
+                                  <span className={`px-2 py-1 rounded-lg ${selectedItem?.isDeleted || selectedItem?.deletedAt
+                                    ? 'bg-white text-red-700'
+                                    : 'bg-white text-emerald-700'
+                                    }`}>
                                     الوحدة: <span className="font-black">{itemUnit}</span>
                                   </span>
                                 )}
-                                <span className={`px-2 py-1 rounded-lg ${
-                                  selectedItem?.isDeleted || selectedItem?.deletedAt
-                                    ? 'bg-white text-red-700'
-                                    : 'bg-white text-emerald-700'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-lg ${selectedItem?.isDeleted || selectedItem?.deletedAt
+                                  ? 'bg-white text-red-700'
+                                  : 'bg-white text-emerald-700'
+                                  }`}>
                                   المتوفر: <span className="font-black">{itemQty}</span>
                                 </span>
-                                <span className={`px-2 py-1 rounded-lg ${
-                                  selectedItem?.isDeleted || selectedItem?.deletedAt
-                                    ? 'bg-white text-red-700'
-                                    : 'bg-white text-emerald-700'
-                                }`}>
+                                <span className={`px-2 py-1 rounded-lg ${selectedItem?.isDeleted || selectedItem?.deletedAt
+                                  ? 'bg-white text-red-700'
+                                  : 'bg-white text-emerald-700'
+                                  }`}>
                                   الفئة: <span className="font-black">{getCategoryLabel(formData.aidCategory)}</span>
                                 </span>
                               </>
@@ -1225,12 +1219,11 @@ const AidCampaigns: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    <p className={`text-xs font-bold mt-1 ${
-                      formData.inventoryItemId && (() => {
-                        const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
-                        return selectedItem?.isDeleted || selectedItem?.deletedAt;
-                      })() ? 'text-red-600' : 'text-gray-500'
-                    }`}>
+                    <p className={`text-xs font-bold mt-1 ${formData.inventoryItemId && (() => {
+                      const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
+                      return selectedItem?.isDeleted || selectedItem?.deletedAt;
+                    })() ? 'text-red-600' : 'text-gray-500'
+                      }`}>
                       {formData.inventoryItemId && (() => {
                         const selectedItem = inventoryItems.find(item => item.id === formData.inventoryItemId);
                         if (selectedItem?.isDeleted || selectedItem?.deletedAt) {
@@ -1977,11 +1970,10 @@ const AidCampaigns: React.FC = () => {
                     <div
                       key={family.id}
                       onClick={() => handleFamilyToggle(family.id)}
-                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                          : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-sm'
-                      }`}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected
+                        ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                        : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-sm'
+                        }`}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
@@ -1990,11 +1982,10 @@ const AidCampaigns: React.FC = () => {
                             <p className="text-xs text-gray-500 font-bold mt-1">{family.head_of_family_phone_number}</p>
                           )}
                         </div>
-                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${
-                          isSelected
-                            ? 'border-emerald-500 bg-emerald-500'
-                            : 'border-gray-300'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${isSelected
+                          ? 'border-emerald-500 bg-emerald-500'
+                          : 'border-gray-300'
+                          }`}>
                           {isSelected && (
                             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
