@@ -1766,7 +1766,7 @@ const DPDetails: React.FC = () => {
             </svg>
             <span className="whitespace-nowrap">السكن والمرافق</span>
           </button>
-          <button
+          {/* <button
             onClick={() => setActiveTab('health')}
             className={`flex-1 min-w-[110px] sm:min-w-[140px] px-2 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-sm transition-all flex items-center justify-center gap-1 sm:gap-2 ${
               activeTab === 'health'
@@ -1778,7 +1778,7 @@ const DPDetails: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
             <span className="whitespace-nowrap">الهشاشة</span>
-          </button>
+          </button> */}
           {/* Spouse Tab - Show if married (not single) */}
           {(() => {
             const isEdit = isEditMode && editableData;
@@ -3253,10 +3253,9 @@ const DPDetails: React.FC = () => {
         </div>
       )}
 
-      {/* Health Tab */}
-      {activeTab === 'health' && (
+      {/* Health Tab - DISABLED */}
+      {/* {activeTab === 'health' && (
         <div className="space-y-6">
-          {/* ⚠️  DISABLED: Vulnerability section has been disabled */}
           <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6">
             <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
               <div className="w-8 h-8 bg-gray-100 text-gray-600 rounded-lg flex items-center justify-center">
@@ -3267,7 +3266,6 @@ const DPDetails: React.FC = () => {
               الهشاشة (معطل)
             </h3>
             
-            {/* Disabled message */}
             <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-6 text-center">
               <div className="text-5xl mb-4">⚠️</div>
               <h4 className="font-black text-gray-800 mb-2">
@@ -3280,68 +3278,9 @@ const DPDetails: React.FC = () => {
                 تم تعطيل احتساب درجات الهشاشة في جميع أنحاء النظام. الحقول ذات الصلة بالهشاشة لا تزال موجودة في قاعدة البيانات للاستخدام المستقبلي.
               </p>
             </div>
-
-            {/* Original code kept for potential re-enablement:
-            {isEditMode && editableData ? (
-              <div className="space-y-4">
-                <div className="bg-amber-50 border-2 border-amber-100 rounded-xl p-4">
-                  <h4 className="font-black text-amber-800 mb-3 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    الهشاشة (يتم احتسابها تلقائياً)
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-gray-500 font-bold text-xs mb-1">مستوى الهشاشة</p>
-                      <p className="font-black text-amber-700">
-                        {dp.vulnerabilityPriority ? VULNERABILITY_LEVELS[dp.vulnerabilityPriority as keyof typeof VULNERABILITY_LEVELS]?.label : '-'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500 font-bold text-xs mb-1">درجة الهشاشة</p>
-                      <p className="font-black text-amber-700">{dp.vulnerabilityScore || 0}</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-600 text-xs mt-3">
-                    يتم احتساب الهشاشة تلقائياً بناءً على: الإعاقة، الأمراض المزمنة، الإصابات الحربية، الحمل، كبار السن، والأطفال
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">سبب الهشاشة (ملاحظات)</label>
-                  <textarea
-                    value={editableData.vulnerabilityReason || ''}
-                    onChange={(e) => handleFieldChange('vulnerabilityReason', e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                    placeholder="اكتب سبب الهشاشة هنا..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-500 font-bold text-sm">مستوى الهشاشة</span>
-                  <span className={`px-3 py-1 rounded-full font-black text-sm ${VULNERABILITY_LEVELS[dp.vulnerabilityPriority as keyof typeof VULNERABILITY_LEVELS]?.color || 'bg-gray-200 text-gray-700'}`}>
-                    {VULNERABILITY_LEVELS[dp.vulnerabilityPriority as keyof typeof VULNERABILITY_LEVELS]?.label || '-'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-500 font-bold text-sm">درجة الهشاشة</span>
-                  <span className="font-black text-gray-800">{dp.vulnerabilityScore || 0}</span>
-                </div>
-                {dp.vulnerabilityReason && (
-                  <div className="py-2">
-                    <span className="text-gray-500 font-bold text-sm block mb-1">سبب الهشاشة</span>
-                    <span className="font-black text-gray-800">{dp.vulnerabilityReason}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            */}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Spouse Tab */}
       {activeTab === 'spouse' && (

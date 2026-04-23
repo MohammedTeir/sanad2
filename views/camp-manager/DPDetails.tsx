@@ -1697,7 +1697,7 @@ const DPDetails: React.FC = () => {
             </svg>
             <span className="whitespace-nowrap">السكن والمرافق</span>
           </button>
-          <button
+          {/* <button
             onClick={() => setActiveTab('health')}
             className={`flex-1 min-w-[110px] sm:min-w-[140px] px-2 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-sm transition-all flex items-center justify-center gap-1 sm:gap-2 ${
               activeTab === 'health'
@@ -1709,7 +1709,7 @@ const DPDetails: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
             <span className="whitespace-nowrap">الهشاشة</span>
-          </button>
+          </button> */}
           {/* Spouse Tab - Show if married (not single) */}
           {(() => {
             const currentHeadRole = isEditMode && editableData ? editableData.headRole : dp.headRole;
@@ -3183,10 +3183,9 @@ const DPDetails: React.FC = () => {
         </div>
       )}
 
-      {/* Health Tab */}
-      {activeTab === 'health' && (
+      {/* Health Tab - DISABLED */}
+      {/* {activeTab === 'health' && (
         <div className="space-y-6">
-          {/* Vulnerability */}
           <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6">
             <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
               <div className="w-8 h-8 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
@@ -3198,7 +3197,6 @@ const DPDetails: React.FC = () => {
             </h3>
             {isEditMode && editableData ? (
               <div className="space-y-4">
-                {/* Vulnerability Score & Priority - READ ONLY (Auto-calculated by database) */}
                 <div className="bg-amber-50 border-2 border-amber-100 rounded-xl p-4">
                   <h4 className="font-black text-amber-800 mb-3 flex items-center gap-2">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3223,7 +3221,6 @@ const DPDetails: React.FC = () => {
                   </p>
                 </div>
                 
-                {/* Vulnerability Reason - Editable */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">سبب الهشاشة (ملاحظات)</label>
                   <textarea
@@ -3257,7 +3254,7 @@ const DPDetails: React.FC = () => {
             )}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Spouse Tab */}
       {activeTab === 'spouse' && (
