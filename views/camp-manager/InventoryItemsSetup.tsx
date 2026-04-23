@@ -145,6 +145,7 @@ const InventoryItemsSetup: React.FC = () => {
         return;
       }
 
+      // Load all non-deleted items (both active and inactive) - filtering is done client-side
       const [inventoryItems, aidTypesData] = await Promise.all([
         realDataService.getInventoryItems(),
         realDataService.getAidTypes()
@@ -277,6 +278,17 @@ const InventoryItemsSetup: React.FC = () => {
 
   const handleDelete = async (item: InventoryItem) => {
     setDeletingItem(item);
+  };
+
+  const handleRestore = async (item: InventoryItem) => {
+    try {
+      await realDataService.restoreInventoryItem(item.id, 'تمت استعادة العنصر');
+      setToast({ message: 'تم استعادة عنصر المخزون بنجاح', type: 'success' });
+      await loadItems();
+    } catch (err: any) {
+      setToast({ message: err.message || 'فشل استعادة عنصر المخزون', type: 'error' });
+      console.error('Error restoring inventory item:', err);
+    }
   };
 
   const confirmDelete = async () => {
