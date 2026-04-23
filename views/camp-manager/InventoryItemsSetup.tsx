@@ -12,7 +12,7 @@ interface InventoryItem {
   name?: string;
   category: string;
   unit?: string;
-  
+
   // Quantity fields
   minStock?: number;
   min_stock?: number;
@@ -24,7 +24,7 @@ interface InventoryItem {
   quantity_reserved?: number;
   quantityAllocated?: number;
   quantity_allocated?: number;
-  
+
   // New fields from schema
   minAlertThreshold?: number;
   min_alert_threshold?: number;
@@ -33,7 +33,7 @@ interface InventoryItem {
   donor?: string;
   receivedDate?: string;
   received_date?: string;
-  
+
   isActive?: boolean;
   is_active?: boolean;
   isDeleted?: boolean;
@@ -122,7 +122,7 @@ const InventoryItemsSetup: React.FC = () => {
   useEffect(() => {
     // Scroll to top when page loads
     window.scrollTo(0, 0);
-    
+
     const currentUser = sessionService.getCurrentUser();
     if (currentUser?.campId) {
       setCurrentCampId(currentUser.campId);
@@ -145,6 +145,7 @@ const InventoryItemsSetup: React.FC = () => {
         return;
       }
 
+      // Load all non-deleted items (both active and inactive) - filtering is done client-side
       const [inventoryItems, aidTypesData] = await Promise.all([
         realDataService.getInventoryItems(),
         realDataService.getAidTypes()
@@ -279,6 +280,17 @@ const InventoryItemsSetup: React.FC = () => {
     setDeletingItem(item);
   };
 
+  const handleRestore = async (item: InventoryItem) => {
+    try {
+      await realDataService.restoreInventoryItem(item.id, 'تمت استعادة العنصر');
+      setToast({ message: 'تم استعادة عنصر المخزون بنجاح', type: 'success' });
+      await loadItems();
+    } catch (err: any) {
+      setToast({ message: err.message || 'فشل استعادة عنصر المخزون', type: 'error' });
+      console.error('Error restoring inventory item:', err);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deletingItem) return;
 
@@ -339,30 +351,30 @@ const InventoryItemsSetup: React.FC = () => {
       item.notes,
       ITEM_CATEGORIES.find(c => c.value === item.category)?.label || ''
     ]);
-    
+
     const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
     const matchesStatus = filterStatus === 'all' ||
       (filterStatus === 'نشط' && isActive) ||
       (filterStatus === 'غير نشط' && !isActive);
-    
+
     // Stock level filter
     const matchesStockLevel = filterStockLevel === 'all' ||
       (filterStockLevel === 'منخفض' && qty <= min && qty > 0) ||
       (filterStockLevel === 'طبيعي' && qty > min && qty <= max) ||
       (filterStockLevel === 'مرتفع' && qty > max);
-    
+
     // Quantity range filters
     const matchesQuantityMin = filterQuantityMin === '' || qty >= parseInt(filterQuantityMin);
     const matchesQuantityMax = filterQuantityMax === '' || qty <= parseInt(filterQuantityMax);
 
-    return matchesSearch && matchesCategory && matchesStatus && 
-           matchesStockLevel && matchesQuantityMin && matchesQuantityMax;
+    return matchesSearch && matchesCategory && matchesStatus &&
+      matchesStockLevel && matchesQuantityMin && matchesQuantityMax;
   });
 
   const filteredAndSortedItems = filteredItems.sort((a, b) => {
     const aValue = a[sortBy as keyof InventoryItem] || '';
     const bValue = b[sortBy as keyof InventoryItem] || '';
-    
+
     if (sortOrder === 'asc') {
       return aValue > bValue ? 1 : -1;
     } else {
@@ -809,9 +821,8 @@ const InventoryItemsSetup: React.FC = () => {
                   </div>
                   <div className="p-4 bg-gray-50 rounded-xl">
                     <p className="text-xs text-gray-500 font-bold mb-1">الفئة</p>
-                    <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs ${
-                      ITEM_CATEGORIES.find(c => c.value === viewingItem.category)?.color || 'bg-gray-100 text-gray-700'
-                    }`}>
+                    <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs ${ITEM_CATEGORIES.find(c => c.value === viewingItem.category)?.color || 'bg-gray-100 text-gray-700'
+                      }`}>
                       {ITEM_CATEGORIES.find(c => c.value === viewingItem.category)?.label || viewingItem.category}
                     </span>
                   </div>
@@ -821,9 +832,8 @@ const InventoryItemsSetup: React.FC = () => {
                   </div>
                   <div className="p-4 bg-gray-50 rounded-xl">
                     <p className="text-xs text-gray-500 font-bold mb-1">الحالة</p>
-                    <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs ${
-                      (viewingItem.is_active !== undefined ? viewingItem.is_active : viewingItem.isActive) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span className={`inline-block px-3 py-1 rounded-lg font-black text-xs ${(viewingItem.is_active !== undefined ? viewingItem.is_active : viewingItem.isActive) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
                       {(viewingItem.is_active !== undefined ? viewingItem.is_active : viewingItem.isActive) ? 'نشط' : 'غير نشط'}
                     </span>
                   </div>
@@ -856,7 +866,7 @@ const InventoryItemsSetup: React.FC = () => {
                     <p className="text-2xl font-black text-amber-900">{viewingItem.quantity_reserved ?? viewingItem.quantityReserved ?? 0}</p>
                   </div>
                 </div>
-                
+
                 {/* Alert Threshold */}
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="p-4 bg-red-50 rounded-xl border-2 border-red-100">
@@ -866,7 +876,7 @@ const InventoryItemsSetup: React.FC = () => {
                   <div className="p-4 bg-gray-50 rounded-xl border-2 border-gray-100">
                     <p className="text-xs text-gray-700 font-bold mb-1">تاريخ الصلاحية</p>
                     <p className="text-lg font-black text-gray-900">
-                      {viewingItem.expiry_date ?? viewingItem.expiryDate 
+                      {viewingItem.expiry_date ?? viewingItem.expiryDate
                         ? new Date(viewingItem.expiry_date ?? viewingItem.expiryDate).toLocaleDateString('ar-EG')
                         : 'غير محدد'}
                     </p>
@@ -888,7 +898,7 @@ const InventoryItemsSetup: React.FC = () => {
                   <div className="p-4 bg-gray-50 rounded-xl">
                     <p className="text-xs text-gray-500 font-bold mb-1">تاريخ الاستلام</p>
                     <p className="text-sm font-black text-gray-800">
-                      {viewingItem.received_date ?? viewingItem.receivedDate 
+                      {viewingItem.received_date ?? viewingItem.receivedDate
                         ? new Date(viewingItem.received_date ?? viewingItem.receivedDate).toLocaleDateString('ar-EG')
                         : '-'}
                     </p>
@@ -1061,7 +1071,7 @@ const InventoryItemsSetup: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-emerald-50 to-teal-50">
               <tr>
-                <th 
+                <th
                   className="px-6 py-4 text-right text-sm font-black text-gray-700 cursor-pointer hover:bg-emerald-100 transition-colors"
                   onClick={() => handleSort('name')}
                 >
@@ -1106,166 +1116,162 @@ const InventoryItemsSetup: React.FC = () => {
                   const isDeleted = item.is_deleted === true;
 
                   return (
-                  <tr key={item.id} className={`hover:bg-gray-50 transition-colors ${isDeleted ? 'bg-red-50 border-2 border-red-200' : ''}`}>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className={`font-black text-gray-800 text-lg ${isDeleted ? 'line-through text-red-600' : ''}`}>{name}</p>
-                        {isDeleted && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-red-600 text-white text-xs font-black rounded">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            محذوف
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs border-2 ${
-                        ITEM_CATEGORIES.find(c => c.value === item.category)?.color || 'bg-gray-100 text-gray-700'
-                      } ${isDeleted ? 'opacity-50' : ''}`}>
-                        <Icon path={ITEM_CATEGORIES.find(c => c.value === item.category)?.icon || ''} className="w-5 h-5" />
-                        {ITEM_CATEGORIES.find(c => c.value === item.category)?.label || item.category}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-block px-4 py-2 rounded-xl font-bold text-sm ${isDeleted ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-                        {unit}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-lg font-black ${
-                            isDeleted ? 'text-red-400 line-through' :
-                            quantityAvailable !== undefined && quantityAvailable <= minStock && quantityAvailable > 0
-                              ? 'text-red-600'
-                              : quantityAvailable === 0
-                              ? 'text-red-700'
-                              : 'text-emerald-700'
-                          }`}>
-                            {quantityAvailable ?? 0}
-                          </span>
-                          <span className={`text-xs font-bold ${isDeleted ? 'text-red-300' : 'text-gray-500'}`}>{unit}</span>
-                        </div>
-                        {quantityAvailable !== undefined && quantityAvailable <= minStock && quantityAvailable > 0 && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded-lg font-black text-xs animate-pulse">
-                            <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" className="w-4 h-4" />
-                            مخزون منخفض
-                          </span>
-                        )}
-                        {quantityAvailable === 0 && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded-lg font-black text-xs animate-pulse">
-                            <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" className="w-4 h-4" />
-                            نفذت الكمية
-                          </span>
-                        )}
-                        {quantityAvailable !== undefined && quantityAvailable > minStock && quantityAvailable <= maxStock && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-xs">
-                            <Icon path="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" className="w-4 h-4" />
-                            متاح
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-gray-600">أدنى:</span>
-                          <span className="text-sm font-black text-gray-800">{minStock}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-gray-600">أقصى:</span>
-                          <span className="text-sm font-black text-gray-800">{maxStock}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-block px-4 py-2 rounded-xl font-bold text-xs ${
-                        isActive
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {isActive ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Icon path="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" className="w-4 h-4" />
-                            نشط
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1">
-                            <Icon path="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" className="w-4 h-4" />
-                            غير نشط
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {isDeleted ? (
-                          <button
-                            onClick={() => handleRestore(item)}
-                            className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-all"
-                            title="استعادة"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                            </svg>
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => handleView(item)}
-                              className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 hover:bg-blue-200 flex items-center justify-center transition-all"
-                              title="عرض التفاصيل"
-                            >
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-all"
-                              title="تعديل"
-                            >
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleToggleActive(item)}
-                              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                                item.is_active
-                                  ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
-                                  : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
-                              }`}
-                              title={item.is_active ? 'إيقاف' : 'تنشيط'}
-                            >
-                              {item.is_active ? (
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              ) : (
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item)}
-                              className="w-9 h-9 rounded-xl bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center transition-all"
-                              title="حذف"
-                            >
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <tr key={item.id} className={`hover:bg-gray-50 transition-colors ${isDeleted ? 'bg-red-50 border-2 border-red-200' : ''}`}>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className={`font-black text-gray-800 text-lg ${isDeleted ? 'line-through text-red-600' : ''}`}>{name}</p>
+                          {isDeleted && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-red-600 text-white text-xs font-black rounded">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
+                              محذوف
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs border-2 ${ITEM_CATEGORIES.find(c => c.value === item.category)?.color || 'bg-gray-100 text-gray-700'
+                          } ${isDeleted ? 'opacity-50' : ''}`}>
+                          <Icon path={ITEM_CATEGORIES.find(c => c.value === item.category)?.icon || ''} className="w-5 h-5" />
+                          {ITEM_CATEGORIES.find(c => c.value === item.category)?.label || item.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-block px-4 py-2 rounded-xl font-bold text-sm ${isDeleted ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                          {unit}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-lg font-black ${isDeleted ? 'text-red-400 line-through' :
+                                quantityAvailable !== undefined && quantityAvailable <= minStock && quantityAvailable > 0
+                                  ? 'text-red-600'
+                                  : quantityAvailable === 0
+                                    ? 'text-red-700'
+                                    : 'text-emerald-700'
+                              }`}>
+                              {quantityAvailable ?? 0}
+                            </span>
+                            <span className={`text-xs font-bold ${isDeleted ? 'text-red-300' : 'text-gray-500'}`}>{unit}</span>
+                          </div>
+                          {quantityAvailable !== undefined && quantityAvailable <= minStock && quantityAvailable > 0 && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded-lg font-black text-xs animate-pulse">
+                              <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" className="w-4 h-4" />
+                              مخزون منخفض
+                            </span>
+                          )}
+                          {quantityAvailable === 0 && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded-lg font-black text-xs animate-pulse">
+                              <Icon path="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" className="w-4 h-4" />
+                              نفذت الكمية
+                            </span>
+                          )}
+                          {quantityAvailable !== undefined && quantityAvailable > minStock && quantityAvailable <= maxStock && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-xs">
+                              <Icon path="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" className="w-4 h-4" />
+                              متاح
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-600">أدنى:</span>
+                            <span className="text-sm font-black text-gray-800">{minStock}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-600">أقصى:</span>
+                            <span className="text-sm font-black text-gray-800">{maxStock}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-block px-4 py-2 rounded-xl font-bold text-xs ${isActive
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-gray-100 text-gray-500'
+                          }`}>
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Icon path="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" className="w-4 h-4" />
+                              نشط
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <Icon path="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" className="w-4 h-4" />
+                              غير نشط
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {isDeleted ? (
+                            <button
+                              onClick={() => handleRestore(item)}
+                              className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-all"
+                              title="استعادة"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                              </svg>
                             </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleView(item)}
+                                className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 hover:bg-blue-200 flex items-center justify-center transition-all"
+                                title="عرض التفاصيل"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleEdit(item)}
+                                className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-all"
+                                title="تعديل"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleToggleActive(item)}
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${item.is_active
+                                    ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                                    : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                                  }`}
+                                title={item.is_active ? 'إيقاف' : 'تنشيط'}
+                              >
+                                {item.is_active ? (
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item)}
+                                className="w-9 h-9 rounded-xl bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center transition-all"
+                                title="حذف"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
                 })
               )}
             </tbody>

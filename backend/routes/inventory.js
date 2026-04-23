@@ -24,6 +24,7 @@ const formatInventoryItem = (item) => ({
   receivedDate: item.received_date,
   notes: item.notes,
   isActive: item.is_active,
+  is_active: item.is_active,
   isDeleted: item.is_deleted,
   deletedAt: item.deleted_at,
   createdAt: item.created_at,
@@ -68,7 +69,7 @@ router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'in
     console.log('Timestamp:', new Date().toISOString());
 
     // Check if user wants to include deleted records (admin only) or if we need to include referenced deleted items
-    const { includeDeleted, includeReferencedDeleted, _t } = req.query; // _t is cache-busting timestamp
+    const { includeDeleted, includeReferencedDeleted, isActive, _t } = req.query; // _t is cache-busting timestamp
     const showDeleted = includeDeleted === 'true' && req.user.role === 'SYSTEM_ADMIN';
     const showReferencedDeleted = includeReferencedDeleted === 'true';
 
@@ -95,11 +96,18 @@ router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'in
         } else {
           query = query.eq('is_deleted', false);
         }
-        // Still filter by is_active
-        query = query.eq('is_active', true);
+        // Optionally filter by is_active if specified
+        if (isActive !== undefined) {
+          query = query.eq('is_active', isActive === 'true');
+        }
       } else {
-        // Standard behavior: only active, non-deleted items
-        query = query.eq('is_deleted', false).eq('is_active', true);
+        // Standard behavior: only non-deleted items (include both active and inactive)
+        query = query.eq('is_deleted', false);
+
+        // Optionally filter by is_active if specified
+        if (isActive !== undefined) {
+          query = query.eq('is_active', isActive === 'true');
+        }
       }
     }
 
@@ -346,7 +354,7 @@ router.post('/transactions', authenticateToken, async (req, res, next) => {
 
       // Check 1: Cannot distribute more than available
       if (availableQty < distributionQty) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: getMessage('inventory', 'insufficientQuantity', 'Insufficient quantity available'),
           details: { available: availableQty, requested: distributionQty }
         });
@@ -355,13 +363,13 @@ router.post('/transactions', authenticateToken, async (req, res, next) => {
       // Check 2: Cannot distribute reserved quantity
       const distributableQty = availableQty - reservedQty;
       if (distributableQty < distributionQty) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'الكمية المطلوبة محجوزة ولا يمكن توزيعها',
-          details: { 
-            available: availableQty, 
-            reserved: reservedQty, 
+          details: {
+            available: availableQty,
+            reserved: reservedQty,
             distributable: distributableQty,
-            requested: distributionQty 
+            requested: distributionQty
           }
         });
       }
@@ -812,12 +820,86 @@ router.delete('/:itemId', authenticateToken, async (req, res, next) => {
       // Don't fail the delete if logging fails
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: getMessage('inventory', 'itemDeleted', 'تم حذف العنصر بنجاح'),
-      itemId: itemId 
+      itemId: itemId
     });
   } catch (error) {
     console.error('Delete inventory item error:', error);
+    next(error);
+  }
+});
+
+// Restore a soft-deleted inventory item
+router.put('/:itemId/restore', authenticateToken, async (req, res, next) => {
+  const itemId = req.params.itemId;
+  const { reason } = req.body;
+
+  try {
+    console.log(`=== RESTORE INVENTORY ITEM ===`);
+    console.log(`Item ID: ${itemId}`);
+    console.log(`Reason: ${reason}`);
+
+    // Get current user info
+    const currentUser = req.user;
+    console.log(`Restored by: ${currentUser.userId} (${currentUser.role})`);
+
+    // Fetch the item to verify it exists and is deleted
+    const { data: item, error: fetchError } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .eq('id', itemId)
+      .single();
+
+    if (fetchError || !item) {
+      return res.status(404).json({ error: getMessage('inventory', 'itemNotFound', 'العنصر غير موجود') });
+    }
+
+    if (!item.is_deleted) {
+      return res.status(400).json({ error: getMessage('inventory', 'itemNotDeleted', 'العنصر ليس محذوفاً') });
+    }
+
+    // Restore the item
+    const { data: updatedItem, error: updateError } = await supabase
+      .from('inventory_items')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Failed to restore item:', updateError);
+      return res.status(500).json({ error: getMessage('inventory', 'restoreFailed', 'فشل استعادة العنصر') });
+    }
+
+    // Log the restoration to audit_logs table
+    try {
+      await supabase.from('audit_logs').insert({
+        action: 'RESTORE',
+        entity_type: 'INVENTORY_ITEM',
+        entity_id: itemId,
+        user_id: currentUser.userId,
+        changes: {
+          restored_from_deleted: true,
+          reason: reason
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (logError) {
+      console.error('Failed to log restoration to audit table:', logError);
+      // Don't fail the restore if logging fails
+    }
+
+    res.status(200).json({
+      message: getMessage('inventory', 'itemRestored', 'تم استعادة العنصر بنجاح'),
+      item: updatedItem
+    });
+  } catch (error) {
+    console.error('Restore inventory item error:', error);
     next(error);
   }
 });
