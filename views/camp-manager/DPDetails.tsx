@@ -3859,6 +3859,9 @@ const DPDetails: React.FC = () => {
                           {dp.wifeDisabilitySeverity && (
                             <span className="block mt-1 text-xs text-gray-600">الشدة: {dp.wifeDisabilitySeverity}</span>
                           )}
+                          {dp.wifeDisabilityDetails && (
+                            <p className="mt-1 text-sm text-gray-700 font-bold">{dp.wifeDisabilityDetails}</p>
+                          )}
                         </div>
                       )}
 
@@ -3866,6 +3869,9 @@ const DPDetails: React.FC = () => {
                         <div className="py-2 border-b border-gray-100">
                           <span className="text-gray-500 font-bold text-sm block mb-1">المرض المزمن</span>
                           <span className="font-black text-gray-800">{dp.wifeChronicDiseaseType}</span>
+                          {dp.wifeChronicDiseaseDetails && (
+                            <p className="mt-1 text-sm text-gray-700 font-bold">{dp.wifeChronicDiseaseDetails}</p>
+                          )}
                         </div>
                       )}
 
@@ -3873,6 +3879,9 @@ const DPDetails: React.FC = () => {
                         <div className="py-2 border-b border-gray-100">
                           <span className="text-gray-500 font-bold text-sm block mb-1">إصابة الحرب</span>
                           <span className="font-black text-gray-800">{dp.wifeWarInjuryType}</span>
+                          {dp.wifeWarInjuryDetails && (
+                            <p className="mt-1 text-sm text-gray-700 font-bold">{dp.wifeWarInjuryDetails}</p>
+                          )}
                         </div>
                       )}
 
