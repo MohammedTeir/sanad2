@@ -542,6 +542,8 @@ export const realDataService = {
           currentHousingSharingStatus: familyRecord.current_housing_sharing_status || familyRecord.current_housing?.sharing_status || familyRecord.currentHousing?.sharingStatus,
           currentHousingDetailedType: familyRecord.current_housing_detailed_type || familyRecord.current_housing?.detailed_type || familyRecord.currentHousing?.detailedType,
           currentHousingFurnished: familyRecord.current_housing_furnished !== undefined ? familyRecord.current_housing_furnished : (familyRecord.current_housing?.furnished !== undefined ? familyRecord.current_housing?.furnished : familyRecord.currentHousing?.furnished),
+          unitNumber: familyRecord.current_housing_unit_number || familyRecord.current_housing?.unit_number || familyRecord.currentHousing?.unitNumber,
+          currentHousingUnitNumber: familyRecord.current_housing_unit_number || familyRecord.current_housing?.unit_number || familyRecord.currentHousing?.unitNumber,
           campId: familyRecord.camp_id,
           registeredDate: familyRecord.registered_date,
           lastUpdated: familyRecord.last_updated,
@@ -808,6 +810,8 @@ export const realDataService = {
         currentHousingSharingStatus: familyRecord.current_housing_sharing_status || familyRecord.current_housing?.sharing_status || familyRecord.currentHousing?.sharingStatus,
         currentHousingDetailedType: familyRecord.current_housing_detailed_type || familyRecord.current_housing?.detailed_type || familyRecord.currentHousing?.detailedType,
         currentHousingFurnished: familyRecord.current_housing_furnished !== undefined ? familyRecord.current_housing_furnished : (familyRecord.current_housing?.furnished !== undefined ? familyRecord.current_housing?.furnished : familyRecord.currentHousing?.furnished),
+        unitNumber: familyRecord.current_housing_unit_number || familyRecord.current_housing?.unit_number || familyRecord.currentHousing?.unitNumber,
+        currentHousingUnitNumber: familyRecord.current_housing_unit_number || familyRecord.current_housing?.unit_number || familyRecord.currentHousing?.unitNumber,
         campId: familyRecord.camp_id,
         registeredDate: familyRecord.registered_date,
         lastUpdated: familyRecord.last_updated,
@@ -981,6 +985,9 @@ export const realDataService = {
         current_housing_governorate: dp.currentHousing.governorate || null,
         current_housing_region: dp.currentHousing.region || null,
         current_housing_landmark: dp.currentHousing.landmark,
+        current_housing_sharing_status: dp.currentHousing.sharingStatus || 'سكن فردي',
+        current_housing_detailed_type: dp.currentHousing.detailedType || '',
+        current_housing_furnished: dp.currentHousing.furnished || false,
         // Set status for new family registrations
         status: 'قيد الانتظار',
         // ⚠️  DISABLED: vulnerability_score, vulnerability_priority, vulnerability_breakdown are NOT auto-calculated

@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS families (
     current_housing_region VARCHAR(100), -- المنطقة
     current_housing_landmark VARCHAR(255), -- أقرب معلم معروف
     -- 5.3 Refugee/Resident Outside Country (لاجئ / مقيم بالخارج)
+    is_resident_abroad BOOLEAN DEFAULT FALSE, -- Migration 017: Flag for refugees/residents abroad
     refugee_resident_abroad_country VARCHAR(100), -- اسم الدولة
     refugee_resident_abroad_city VARCHAR(100), -- المدينة
     refugee_resident_abroad_residence_type VARCHAR(30) CHECK (refugee_resident_abroad_residence_type IN ('لاجئ', 'مقيم نظامي', 'أخرى')), -- نوع الإقامة
@@ -1059,6 +1060,9 @@ CREATE INDEX IF NOT EXISTS idx_families_income_range ON families(head_of_family_
 CREATE INDEX IF NOT EXISTS idx_families_registered_date ON families(registered_date DESC);
 CREATE INDEX IF NOT EXISTS idx_families_last_updated ON families(last_updated DESC);
 CREATE INDEX IF NOT EXISTS idx_families_is_deleted ON families(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_families_is_resident_abroad ON families(is_resident_abroad);
+CREATE INDEX IF NOT EXISTS idx_families_housing_sharing ON families(current_housing_sharing_status);
+CREATE INDEX IF NOT EXISTS idx_families_housing_detailed_type ON families(current_housing_detailed_type);
 
 -- Performance indexes for individuals table
 CREATE INDEX IF NOT EXISTS idx_individuals_family_id ON individuals(family_id);
