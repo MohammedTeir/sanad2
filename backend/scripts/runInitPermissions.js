@@ -62,6 +62,7 @@ const initializeDefaultPermissions = async () => {
     { role: 'FIELD_OFFICER', resource: 'families', action: 'create' },
     { role: 'FIELD_OFFICER', resource: 'individuals', action: 'read' },
     { role: 'FIELD_OFFICER', resource: 'individuals', action: 'create' },
+    { role: 'FIELD_OFFICER', resource: 'inventory', action: 'read' },
     { role: 'FIELD_OFFICER', resource: 'distributions', action: 'read' },
     { role: 'FIELD_OFFICER', resource: 'distributions', action: 'create' },
 
