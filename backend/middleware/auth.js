@@ -21,9 +21,9 @@ const authenticateToken = (req, res, next) => {
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       if (err.name === 'TokenExpiredError') {
-        return next(httpErrors(403, getMessage('auth', 'tokenExpired', 'Token expired')));
+        return next(httpErrors(401, getMessage('auth', 'tokenExpired', 'Token expired')));
       }
-      return next(httpErrors(403, getMessage('auth', 'invalidToken', 'Invalid token')));
+      return next(httpErrors(401, getMessage('auth', 'invalidToken', 'Invalid token')));
     }
 
     req.user = user;

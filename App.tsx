@@ -49,7 +49,9 @@ import DPPortal from './views/beneficiary/DPPortal';
 // Views - Field Officer
 import FieldOfficerDashboard from './views/field-officer/FieldOfficerDashboard';
 import RegisterFamily from './views/field-officer/RegisterFamily';
-import DistributionScannerMode from './views/field-officer/DistributionScannerMode';
+import FO_DistributionList from './views/field-officer/DistributionList';
+import FO_DistributionDetails from './views/field-officer/DistributionDetails';
+import FO_DistributionHistory from './views/field-officer/DistributionHistory';
 import FamilySearch from './views/field-officer/FamilySearch';
 import EmergencyReportForm from './views/field-officer/EmergencyReportForm';
 
@@ -150,7 +152,8 @@ const Sidebar = ({ role, onLogout, isOpen, setIsOpen }: { role: Role, onLogout: 
       { label: 'الرئيسية', icon: ICONS.Home, path: '/field' },
       { label: 'تسجيل ميداني', icon: ICONS.Users, path: '/field/register' },
       { label: 'بحث عن أسرة', icon: ICONS.Users, path: '/field/search' },
-      { label: 'مسح التوزيع', icon: ICONS.Inventory, path: '/field/scan' },
+      { label: 'إدارة التوزيع', icon: ICONS.Inventory, path: '/field/distribution' },
+      { label: 'سجل التوزيعات', icon: ICONS.Inventory, path: '/field/distribution-history' },
       { label: 'بلاغ طارئ', icon: ICONS.Chart, path: '/field/emergency-report' },
     ],
     [Role.DONOR_OBSERVER]: [
@@ -506,7 +509,9 @@ export default function App() {
                               <Route path="/field" element={<FieldOfficerDashboard section="overview" />} />
                               <Route path="/field/register" element={<FieldOfficerDashboard section="register" />} />
                               <Route path="/field/confirm" element={<FieldOfficerDashboard section="confirm" />} />
-                              <Route path="/field/scan" element={<DistributionScannerMode />} />
+                              <Route path="/field/distribution" element={<FO_DistributionList />} />
+                              <Route path="/field/distribution/:campaignId" element={<FO_DistributionDetails />} />
+                              <Route path="/field/distribution-history" element={<FO_DistributionHistory />} />
                               <Route path="/field/search" element={<FamilySearch />} />
                               <Route path="/field/emergency-report" element={<EmergencyReportForm />} />
                               <Route path="/field/register-family" element={<RegisterFamily />} />

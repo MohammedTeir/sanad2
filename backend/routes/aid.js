@@ -14,8 +14,8 @@ router.get('/types', authenticateToken, async (req, res, next) => {
 
     let query;
 
-    if (req.user.role === 'CAMP_MANAGER') {
-      // CAMP_MANAGER can only see aid types in their camp
+    if (req.user.role === 'CAMP_MANAGER' || req.user.role === 'FIELD_OFFICER') {
+      // Both CAMP_MANAGER and FIELD_OFFICER can see aid types in their camp
       if (!req.user.campId) {
         return res.status(400).json({ error: getMessage('aid', 'campIdNotFound', 'Camp ID not found in token') });
       }
@@ -441,12 +441,13 @@ router.get('/distributions/campaign/:campaignId', authenticateToken, async (req,
       return res.status(404).json({ error: getMessage('aid', 'campaignNotFound', 'Campaign not found') });
     }
 
-    // Check authorization: SYSTEM_ADMIN, campaign coordinator, or CAMP_MANAGER of the campaign's camp
+    // Check authorization: SYSTEM_ADMIN, campaign coordinator, or CAMP_MANAGER/FIELD_OFFICER of the campaign's camp
     const isSystemAdmin = req.user.role === 'SYSTEM_ADMIN';
     const isCoordinator = req.user.userId === campaign.coordinator_user_id;
     const isCampManager = req.user.role === 'CAMP_MANAGER' && req.user.campId === campaign.camp_id;
+    const isFieldOfficer = req.user.role === 'FIELD_OFFICER' && req.user.campId === campaign.camp_id;
 
-    if (!isSystemAdmin && !isCoordinator && !isCampManager) {
+    if (!isSystemAdmin && !isCoordinator && !isCampManager && !isFieldOfficer) {
       return res.status(403).json({ error: getMessage('aid', 'accessDenied', 'Access denied') });
     }
 
@@ -804,15 +805,13 @@ router.get('/campaigns', authenticateToken, async (req, res, next) => {
     let query = supabase.from('aid_campaigns').select('*');
 
     // Apply filters based on user role
-    if (req.user.role === 'CAMP_MANAGER') {
-      // CAMP_MANAGER can only see campaigns in their camp
+    if (req.user.role === 'CAMP_MANAGER' || req.user.role === 'FIELD_OFFICER') {
+      // Both CAMP_MANAGER and FIELD_OFFICER can only see campaigns in their camp
       if (!req.user.campId) {
         return res.status(400).json({ error: getMessage('aid', 'campIdNotFound', 'Camp ID not found in token') });
       }
       query = query.eq('camp_id', req.user.campId);
-      console.log('[GET Campaigns] Filtering by camp_id:', req.user.campId);
-    } else if (req.user.role === 'FIELD_OFFICER') {
-      return res.status(403).json({ error: getMessage('aid', 'fieldOfficersNoAccessCampaigns', 'Field officers cannot access campaigns') });
+      console.log(`[GET Campaigns] Filtering by camp_id for ${req.user.role}:`, req.user.campId);
     } else if (req.user.role !== 'SYSTEM_ADMIN') {
       return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
     }
@@ -864,8 +863,13 @@ router.get('/campaigns/:campaignId', authenticateToken, async (req, res, next) =
       return res.status(404).json({ error: getMessage('aid', 'campaignNotFound', 'Campaign not found') });
     }
 
-    // Check authorization
-    if (req.user.role !== 'SYSTEM_ADMIN' && campaign.coordinator_user_id !== req.user.userId) {
+    // Check authorization: SYSTEM_ADMIN, campaign coordinator, or CAMP_MANAGER/FIELD_OFFICER of same camp
+    const isSystemAdmin = req.user.role === 'SYSTEM_ADMIN';
+    const isCoordinator = req.user.userId === campaign.coordinator_user_id;
+    const isCampManager = req.user.role === 'CAMP_MANAGER' && req.user.campId === campaign.camp_id;
+    const isFieldOfficer = req.user.role === 'FIELD_OFFICER' && req.user.campId === campaign.camp_id;
+
+    if (!isSystemAdmin && !isCoordinator && !isCampManager && !isFieldOfficer) {
       return res.status(403).json({ error: getMessage('aid', 'accessDenied', 'Access denied') });
     }
 
@@ -937,7 +941,7 @@ router.put('/campaigns/:campaignId', authenticateToken, async (req, res, next) =
     const { campaignId } = req.params;
 
     // Check authorization
-    if (!['SYSTEM_ADMIN', 'CAMP_MANAGER'].includes(req.user.role)) {
+    if (!['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER'].includes(req.user.role)) {
       return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
     }
 
@@ -952,8 +956,8 @@ router.put('/campaigns/:campaignId', authenticateToken, async (req, res, next) =
       return res.status(404).json({ error: getMessage('aid', 'campaignNotFound', 'Campaign not found') });
     }
 
-    // Check authorization: SYSTEM_ADMIN or coordinator or CAMP_MANAGER of same camp
-    if (req.user.role === 'CAMP_MANAGER') {
+    // Check authorization: SYSTEM_ADMIN or coordinator or CAMP_MANAGER/FIELD_OFFICER of same camp
+    if (req.user.role === 'CAMP_MANAGER' || req.user.role === 'FIELD_OFFICER') {
       if (!req.user.campId || campaign.camp_id !== req.user.campId) {
         return res.status(403).json({ error: getMessage('aid', 'unauthorizedUpdateCampaign', 'Unauthorized to update this campaign - not in your camp') });
       }

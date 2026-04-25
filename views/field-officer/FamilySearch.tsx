@@ -12,13 +12,10 @@ import { GAZA_LOCATIONS, getAreasByGovernorate } from '../../constants/gazaLocat
 interface SearchFilters {
   searchQuery: string;
   status: 'all' | 'قيد الانتظار' | 'موافق' | 'مرفوض';
-  vulnerabilityPriority: string[];
   governorate: string;
   region: string;
   familySizeMin: string;
   familySizeMax: string;
-  vulnerabilityScoreMin: string;
-  vulnerabilityScoreMax: string;
   childCountMin: string;
   childCountMax: string;
   seniorCountMin: string;
@@ -40,13 +37,6 @@ interface SearchFilters {
   maritalStatusMulti: string[];
   isEmployed: boolean | null;
 }
-
-const VULNERABILITY_LEVELS = [
-  { value: 'عالي جداً', label: 'عالي جداً', color: 'bg-red-50 text-red-700 border-red-200' },
-  { value: 'عالي', label: 'عالي', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { value: 'متوسط', label: 'متوسط', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { value: 'منخفض', label: 'منخفض', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-];
 
 const DISABILITY_TYPES = [
   { value: 'لا يوجد', label: 'لا يوجد', color: 'bg-gray-50 text-gray-700 border-gray-200' },
@@ -93,20 +83,6 @@ const HOUSING_TYPES = [
   { value: 'أخرى', label: 'أخرى' }
 ];
 
-// Arabic translations for vulnerability breakdown keys
-const VULNERABILITY_TRANSLATIONS: Record<string, string> = {
-  income: 'الدخل',
-  orphans: 'الأيتام',
-  seniors: 'كبار السن',
-  children: 'الأطفال',
-  pregnancy: 'الحمل',
-  disabilities: 'الإعاقات',
-  housing_type: 'نوع السكن',
-  war_injuries: 'إصابات الحرب',
-  chronic_diseases: 'الأمراض المزمنة',
-  absence_of_provider: 'انعدام المعيل'
-};
-
 const FamilySearch = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -124,13 +100,10 @@ const FamilySearch = () => {
   const [filters, setFilters] = useState<SearchFilters>({
     searchQuery: '',
     status: 'all',
-    vulnerabilityPriority: [],
     governorate: 'all',
     region: 'all',
     familySizeMin: '',
     familySizeMax: '',
-    vulnerabilityScoreMin: '',
-    vulnerabilityScoreMax: '',
     childCountMin: '',
     childCountMax: '',
     seniorCountMin: '',
@@ -214,9 +187,6 @@ const FamilySearch = () => {
 
     const matchesStatus = filters.status === 'all' || family.registrationStatus === filters.status;
 
-    const matchesVulnerabilityPriority = filters.vulnerabilityPriority.length === 0 ||
-      (family.vulnerabilityPriority && filters.vulnerabilityPriority.includes(family.vulnerabilityPriority));
-
     const matchesGovernorate = filters.governorate === 'all' ||
       family.currentHousingGovernorate === filters.governorate ||
       family.originalAddressGovernorate === filters.governorate;
@@ -230,10 +200,6 @@ const FamilySearch = () => {
 
     const matchesFamilySizeMax = filters.familySizeMax === '' ||
       family.totalMembersCount <= parseInt(filters.familySizeMax);
-
-    const matchesVulnerabilityScore =
-      (filters.vulnerabilityScoreMin === '' || (family.vulnerabilityScore || 0) >= parseFloat(filters.vulnerabilityScoreMin)) &&
-      (filters.vulnerabilityScoreMax === '' || (family.vulnerabilityScore || 0) <= parseFloat(filters.vulnerabilityScoreMax));
 
     const matchesChildCountMin = filters.childCountMin === '' ||
       (family.childCount || 0) >= parseInt(filters.childCountMin);
@@ -297,10 +263,9 @@ const FamilySearch = () => {
     const matchesIsEmployed = filters.isEmployed === null ||
       (filters.isEmployed ? family.isWorking : !family.isWorking);
 
-    return matchesSearch && matchesStatus && matchesVulnerabilityPriority &&
+    return matchesSearch && matchesStatus &&
            matchesGovernorate && matchesRegion &&
            matchesFamilySizeMin && matchesFamilySizeMax &&
-           matchesVulnerabilityScore &&
            matchesChildCountMin && matchesChildCountMax &&
            matchesSeniorCountMin && matchesSeniorCountMax &&
            matchesHasDisability && matchesDisabilityType &&
@@ -318,16 +283,6 @@ const FamilySearch = () => {
     setShowModal(true);
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'عالي جداً': return 'bg-red-100 text-red-700 border-red-200';
-      case 'عالي': return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'متوسط': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'منخفض': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'موافق': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -339,10 +294,9 @@ const FamilySearch = () => {
 
   const resetFilters = () => {
     setFilters({
-      searchQuery: '', status: 'all', vulnerabilityPriority: [],
+      searchQuery: '', status: 'all',
       governorate: 'all', region: 'all',
       familySizeMin: '', familySizeMax: '',
-      vulnerabilityScoreMin: '', vulnerabilityScoreMax: '',
       childCountMin: '', childCountMax: '',
       seniorCountMin: '', seniorCountMax: '',
       hasDisability: null, disabilityType: [],
@@ -402,7 +356,7 @@ const FamilySearch = () => {
         </div>
 
         {/* Quick Filters Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
           <div>
             <label className="block text-xs font-black text-gray-700 mb-2 uppercase tracking-wide">
               <span className="flex items-center gap-2">
@@ -422,24 +376,6 @@ const FamilySearch = () => {
               <option value="موافق">موافق</option>
               <option value="مرفوض">مرفوض</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black text-gray-700 mb-2 uppercase tracking-wide">
-              <span className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                الأولوية
-              </span>
-            </label>
-            <MultiSelectFilter
-              options={VULNERABILITY_LEVELS}
-              value={filters.vulnerabilityPriority}
-              onChange={(values) => setFilters({ ...filters, vulnerabilityPriority: values })}
-              placeholder="اختر الأولوية"
-              iconColor="blue"
-            />
           </div>
         </div>
 
@@ -528,26 +464,6 @@ const FamilySearch = () => {
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-2">كبار السن (أدنى)</label>
                   <input type="number" value={filters.seniorCountMin} onChange={(e) => setFilters({ ...filters, seniorCountMin: e.target.value })} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none transition-all focus:bg-white focus:border-blue-500 text-sm font-bold" placeholder="0" />
-                </div>
-              </div>
-            </div>
-
-            {/* Vulnerability Score */}
-            <div>
-              <h3 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-                درجة الهشاشة
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-2">الدرجة (أدنى)</label>
-                  <input type="number" value={filters.vulnerabilityScoreMin} onChange={(e) => setFilters({ ...filters, vulnerabilityScoreMin: e.target.value })} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none transition-all focus:bg-white focus:border-blue-500 text-sm font-bold" placeholder="0" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-2">الدرجة (أقصى)</label>
-                  <input type="number" value={filters.vulnerabilityScoreMax} onChange={(e) => setFilters({ ...filters, vulnerabilityScoreMax: e.target.value })} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none transition-all focus:bg-white focus:border-blue-500 text-sm font-bold" placeholder="100" />
                 </div>
               </div>
             </div>
@@ -674,15 +590,11 @@ const FamilySearch = () => {
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <h3 className="font-black text-gray-800 text-lg truncate">{getFullName(family)}</h3>
                     <StatusBadge status={family.registrationStatus || 'قيد الانتظار'} />
-                    <span className={`px-3 py-1 rounded-full text-xs font-black border ${getPriorityColor(family.vulnerabilityPriority || 'منخفض')}`}>
-                      {family.vulnerabilityPriority || 'منخفض'}
-                    </span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
                     <div className="text-gray-500 font-bold"><span className="text-gray-400">الهوية:</span> {family.nationalId || '-'}</div>
                     <div className="text-gray-500 font-bold"><span className="text-gray-400">الهاتف:</span> {family.phoneNumber || '-'}</div>
                     <div className="text-gray-500 font-bold"><span className="text-gray-400">الأفراد:</span> {family.totalMembersCount || 0}</div>
-                    <div className="text-gray-500 font-bold"><span className="text-gray-400">الهشاشة:</span> {family.vulnerabilityScore || 0}%</div>
                   </div>
                 </div>
                 <div className="text-gray-400">
@@ -725,41 +637,12 @@ const FamilySearch = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div className="bg-gray-50 rounded-2xl p-4 text-center">
                   <p className="text-xs text-gray-500 font-bold mb-1">إجمالي الأفراد</p>
                   <p className="text-2xl font-black text-gray-800">{selectedFamily.totalMembersCount || 0}</p>
                 </div>
-                <div className="bg-gray-50 rounded-2xl p-4 text-center">
-                  <p className="text-xs text-gray-500 font-bold mb-1">درجة الهشاشة</p>
-                  <p className="text-2xl font-black text-gray-800">{selectedFamily.vulnerabilityScore || 0}%</p>
-                </div>
-                <div className="bg-gray-50 rounded-2xl p-4 text-center">
-                  <p className="text-xs text-gray-500 font-bold mb-1">الأولوية</p>
-                  <p className={`text-lg font-black ${selectedFamily.vulnerabilityPriority === 'عالي جداً' ? 'text-red-600' : selectedFamily.vulnerabilityPriority === 'عالي' ? 'text-orange-600' : selectedFamily.vulnerabilityPriority === 'متوسط' ? 'text-amber-600' : 'text-emerald-600'}`}>{selectedFamily.vulnerabilityPriority || 'منخفض'}</p>
-                </div>
               </div>
-
-              {selectedFamily.vulnerabilityBreakdown && Object.keys(selectedFamily.vulnerabilityBreakdown).length > 0 && (
-                <div className="bg-gray-50 rounded-2xl p-4">
-                  <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    تفصيل الهشاشة
-                  </h3>
-                  <div className="space-y-2">
-                    {Object.entries(selectedFamily.vulnerabilityBreakdown)
-                      .filter(([key, value]) => key !== 'weights' && typeof value !== 'object')
-                      .map(([key, value]: [string, any]) => (
-                        <div key={key} className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600 font-bold">{VULNERABILITY_TRANSLATIONS[key] || key}</span>
-                          <span className="text-gray-800 font-black">{value} نقاط</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
 
               <div className="bg-gray-50 rounded-2xl p-4">
                 <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2">

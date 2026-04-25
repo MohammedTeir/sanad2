@@ -115,8 +115,8 @@ export const makeAuthenticatedRequest = async <T = any>(
       const response = await fetch(url, mergedOptions);
 
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          // Unauthorized or forbidden, remove the token
+        if (response.status === 401) {
+          // Unauthorized, remove the token
           localStorage.removeItem('auth_token');
         }
 

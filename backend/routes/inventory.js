@@ -60,7 +60,7 @@ const formatTransaction = (tx) => {
 };
 
 // Get all inventory items (with optional camp filter)
-router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'inventory', 'read'), async (req, res, next) => {
+router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER'], 'inventory', 'read'), async (req, res, next) => {
   try {
     console.log('=== GET INVENTORY ITEMS ===');
     console.log('User role:', req.user.role);
@@ -112,12 +112,10 @@ router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER'], 'in
     }
 
     // Apply filters based on user role
-    if (req.user.role === 'CAMP_MANAGER') {
+    if (req.user.role === 'CAMP_MANAGER' || req.user.role === 'FIELD_OFFICER') {
       // Limit to inventory items for user's camp
       console.log('Filtering by camp_id:', req.user.campId);
       query = query.eq('camp_id', req.user.campId);
-    } else if (req.user.role === 'FIELD_OFFICER') {
-      return res.status(403).json({ error: getMessage('inventory', 'fieldOfficersNoAccess', 'Field officers cannot access inventory') });
     } else if (req.user.role !== 'SYSTEM_ADMIN') {
       return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
     }

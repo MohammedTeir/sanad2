@@ -35,8 +35,7 @@ router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIE
     } else if (req.user.role === 'FIELD_OFFICER') {
       if (req.user.campId) {
         query = query.eq('camp_id', req.user.campId);
-        // FIELD_OFFICER only sees approved families (using Arabic status)
-        query = query.eq('status', 'موافق');
+        // FIELD_OFFICER sees all families in their camp (including pending/rejected)
       }
     } else if (req.user.role !== 'SYSTEM_ADMIN') {
       return res.status(403).json({ error: getMessage('auth', 'insufficientPermissions', 'Insufficient permissions') });
