@@ -2,10 +2,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { realDataService } from '../../services/realDataServiceBackend';
 import { sessionService } from '../../services/sessionService';
+import { makeAuthenticatedRequest } from '../../utils/apiUtils';
 import Toast from '../../components/Toast';
 import { SearchInput } from '../../components/filters';
 import { matchesArabicSearchMulti } from '../../utils/arabicTextUtils';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 interface IndividualMedicalRecord {
   id: string; // Unique ID (member.id or `${dp.id}_head` or `${dp.id}_wife`)
@@ -60,6 +63,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
     </svg>
   ),
+  Excel: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  Close: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  ),
 };
 
 const IndividualMedicalManagement: React.FC = () => {
@@ -68,6 +81,20 @@ const IndividualMedicalManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'chronic' | 'injury' | 'disability'>('chronic');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFileName, setExportFileName] = useState('');
+  const [exportColumns, setExportColumns] = useState({
+    name: true,
+    nationalId: true,
+    relation: true,
+    gender: true,
+    age: true,
+    phoneNumber: true,
+    medicalDetails: true,
+    medicalFollowup: true,
+  });
+  const [campName, setCampName] = useState<string>('');
 
   const loadData = useCallback(async () => {
     try {
@@ -78,6 +105,16 @@ const IndividualMedicalManagement: React.FC = () => {
       if (!campId) {
         setToast({ message: 'معرف المخيم غير موجود', type: 'error' });
         return;
+      }
+
+      // Fetch camp name
+      try {
+        const camp = await makeAuthenticatedRequest('/camps/my-camp');
+        if (camp && camp.name) {
+          setCampName(camp.name);
+        }
+      } catch (e) {
+        console.error('Error fetching camp name', e);
       }
 
       const families = await realDataService.getDPs(campId);
@@ -221,6 +258,156 @@ const IndividualMedicalManagement: React.FC = () => {
     };
   }, [individuals]);
 
+  const handleExport = async () => {
+    if (!exportFileName.trim()) {
+      setToast({ message: 'الرجاء إدخال اسم الملف', type: 'error' });
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('البيانات الطبية', { views: [{ rightToLeft: true }] });
+
+      const titleText = activeTab === 'chronic' ? 'أمراض مزمنة' : activeTab === 'injury' ? 'جرحى حرب' : 'إعاقات';
+      
+      // 1. Add Title Row
+      const titleRow = worksheet.addRow([`تقرير المتابعة الصحية (${titleText}) - مخيم: ${campName || 'غير محدد'}`]);
+      titleRow.height = 35;
+      worksheet.addRow([]); // Empty row for spacing
+
+      // 2. Build Headers
+      const headers = [];
+      if (exportColumns.name) headers.push('الاسم');
+      if (exportColumns.nationalId) headers.push('رقم الهوية');
+      if (exportColumns.relation) headers.push('الصلة');
+      if (exportColumns.gender) headers.push('الجنس');
+      if (exportColumns.age) headers.push('العمر');
+      if (exportColumns.phoneNumber) headers.push('رقم الهاتف');
+      
+      if (exportColumns.medicalDetails) {
+        if (activeTab === 'chronic') {
+          headers.push('نوع المرض المزمن', 'تفاصيل المرض المزمن');
+        } else if (activeTab === 'injury') {
+          headers.push('نوع إصابة الحرب', 'تفاصيل إصابة الحرب');
+        } else if (activeTab === 'disability') {
+          headers.push('نوع الإعاقة', 'تفاصيل الإعاقة');
+        }
+      }
+      
+      if (exportColumns.medicalFollowup) {
+        headers.push('متابعة طبية', 'تكرار المتابعة');
+      }
+
+      // Add Headers Row
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 25;
+      headerRow.eachCell((cell, colNumber) => {
+        cell.font = { name: 'Arial', bold: true, color: { argb: 'FF374151' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF3F4F6' } // Light gray bg
+        };
+        cell.border = {
+          top: {style:'thin', color: {argb:'FFD1D5DB'}},
+          left: {style:'thin', color: {argb:'FFD1D5DB'}},
+          bottom: {style:'thin', color: {argb:'FFD1D5DB'}},
+          right: {style:'thin', color: {argb:'FFD1D5DB'}}
+        };
+      });
+
+      // 3. Add Data Rows
+      filteredIndividuals.forEach((ind, index) => {
+        const rowData = [];
+        if (exportColumns.name) rowData.push(ind.name);
+        if (exportColumns.nationalId) rowData.push(ind.nationalId || 'غير متوفر');
+        if (exportColumns.relation) rowData.push(ind.relation);
+        if (exportColumns.gender) rowData.push(ind.gender);
+        if (exportColumns.age) rowData.push(ind.age);
+        if (exportColumns.phoneNumber) rowData.push(ind.phoneNumber || 'غير متوفر');
+        
+        if (exportColumns.medicalDetails) {
+          if (activeTab === 'chronic') {
+            rowData.push(ind.chronicDiseaseType);
+            rowData.push(ind.chronicDiseaseDetails || 'لا يوجد تفاصيل');
+          } else if (activeTab === 'injury') {
+            rowData.push(ind.warInjuryType);
+            rowData.push(ind.warInjuryDetails || 'لا يوجد تفاصيل');
+          } else if (activeTab === 'disability') {
+            rowData.push(ind.disabilityType);
+            rowData.push(ind.disabilityDetails || 'لا يوجد تفاصيل');
+          }
+        }
+        
+        if (exportColumns.medicalFollowup) {
+          rowData.push(ind.medicalFollowupRequired ? 'مطلوب' : 'غير مطلوب');
+          rowData.push(ind.medicalFollowupFrequency || 'غير محدد');
+        }
+
+        const dataRow = worksheet.addRow(rowData);
+        dataRow.height = 20;
+        
+        // Add alternating row colors and borders
+        dataRow.eachCell((cell) => {
+          cell.alignment = { vertical: 'middle', horizontal: 'right', wrapText: true };
+          cell.border = {
+            top: {style:'thin', color: {argb:'FFE5E7EB'}},
+            left: {style:'thin', color: {argb:'FFE5E7EB'}},
+            bottom: {style:'thin', color: {argb:'FFE5E7EB'}},
+            right: {style:'thin', color: {argb:'FFE5E7EB'}}
+          };
+          if (index % 2 !== 0) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF9FAFB' }
+            };
+          }
+        });
+      });
+
+      // 4. Formatting and Auto-fitting
+      // Merge Title Row
+      if (headers.length > 1) {
+        worksheet.mergeCells(1, 1, 1, headers.length);
+      }
+      const titleCell = worksheet.getCell('A1');
+      titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' } // Teal background
+      };
+
+      // Auto-fit columns
+      worksheet.columns.forEach((column, i) => {
+        let maxLength = 0;
+        column.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
+          // Skip title row for width calculation to prevent giant columns
+          if (rowNumber > 2) {
+            const columnLength = cell.value ? cell.value.toString().length : 10;
+            if (columnLength > maxLength) {
+              maxLength = columnLength;
+            }
+          }
+        });
+        column.width = Math.min(Math.max(maxLength + 5, 15), 50); // Min 15, Max 50, Pad 5
+      });
+
+      // 5. Generate and Download
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `${exportFileName}.xlsx`);
+      
+      setShowExportModal(false);
+      setToast({ message: 'تم تصدير الملف بنجاح', type: 'success' });
+    } catch (error) {
+      console.error('Export error:', error);
+      setToast({ message: 'فشل تصدير الملف', type: 'error' });
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {toast && (
@@ -239,14 +426,27 @@ const IndividualMedicalManagement: React.FC = () => {
               <p className="text-gray-500 font-bold text-sm">عرض المرضى، الجرحى، وذوي الإعاقة بشكل فردي</p>
             </div>
           </div>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
-          >
-            <Icons.Refresh className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            تحديث البيانات
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setExportFileName(`المتابعة_الصحية_${activeTab === 'chronic' ? 'أمراض_مزمنة' : activeTab === 'injury' ? 'جرحى_حرب' : 'إعاقات'}_${new Date().toLocaleDateString('ar-SA').replace(/\//g, '-')}`);
+                setShowExportModal(true);
+              }}
+              disabled={loading || filteredIndividuals.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-2 border-emerald-100 text-emerald-700 rounded-xl font-bold hover:bg-emerald-100 transition-all disabled:opacity-50"
+            >
+              <Icons.Excel className="w-5 h-5" />
+              تصدير إلى Excel
+            </button>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
+            >
+              <Icons.Refresh className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              تحديث البيانات
+            </button>
+          </div>
         </div>
       </div>
 
@@ -435,6 +635,82 @@ const IndividualMedicalManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden" dir="rtl">
+            <div className="p-6 border-b-2 border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <Icons.Excel className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-black text-gray-800">تصدير إلى Excel</h3>
+              </div>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <Icons.Close className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">اسم الملف</label>
+                <input
+                  type="text"
+                  value={exportFileName}
+                  onChange={(e) => setExportFileName(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:bg-white focus:border-emerald-500 focus:outline-none font-bold transition-all"
+                  placeholder="أدخل اسم الملف..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-3">الأعمدة المضمنة</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries({
+                    name: 'الاسم',
+                    nationalId: 'رقم الهوية',
+                    relation: 'الصلة',
+                    gender: 'الجنس',
+                    age: 'العمر',
+                    phoneNumber: 'رقم الهاتف',
+                    medicalDetails: 'التفاصيل الصحية',
+                    medicalFollowup: 'المتابعة الطبية'
+                  }).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-emerald-200 cursor-pointer transition-all has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50">
+                      <input
+                        type="checkbox"
+                        checked={exportColumns[key as keyof typeof exportColumns]}
+                        onChange={(e) => setExportColumns(prev => ({ ...prev, [key]: e.target.checked }))}
+                        className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
+                      />
+                      <span className="font-bold text-gray-700 text-sm">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t-2 border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-6 py-2.5 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleExport}
+                className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
+              >
+                تصدير الملف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

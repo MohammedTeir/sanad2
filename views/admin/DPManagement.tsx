@@ -8,6 +8,21 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { GAZA_LOCATIONS, getAreasByGovernorate } from '../../constants/gazaLocations';
 import { SearchInput, DateRangeFilter, MultiSelectFilter, FilterPanel } from '../../components/filters';
 import { normalizeArabic, matchesArabicSearchMulti } from '../../utils/arabicTextUtils';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+
+const Icons = {
+  Excel: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  Close: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  ),
+};
 
 interface DPProfile {
   id: string;
@@ -82,6 +97,27 @@ interface DPProfile {
   headOfFamilyMonthlyIncome?: number;
   adminNotes?: string;
   nominationBody?: string;
+  // Medical fields from IndividualMedicalManagement pattern
+  hasWarInjury?: boolean;
+  wifeChronicDiseaseType?: string;
+  wifeChronicDiseaseDetails?: string;
+  wifeWarInjuryType?: string;
+  wifeWarInjuryDetails?: string;
+  wifeDisabilityType?: string;
+  wifeDisabilityDetails?: string;
+  wifeMedicalFollowupRequired?: boolean;
+  wifeMedicalFollowupFrequency?: string;
+  husbandName?: string;
+  husbandNationalId?: string;
+  husbandAge?: number;
+  husbandChronicDiseaseType?: string;
+  husbandChronicDiseaseDetails?: string;
+  husbandWarInjuryType?: string;
+  husbandWarInjuryDetails?: string;
+  husbandDisabilityType?: string;
+  husbandDisabilityDetails?: string;
+  husbandMedicalFollowupRequired?: boolean;
+  husbandMedicalFollowupFrequency?: string;
   members?: any[];
 }
 
@@ -165,6 +201,23 @@ const DPManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [activeTab, setActiveTab] = useState<'all' | 'قيد الانتظار' | 'موافق'>('all');
+
+  // Export State
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFileName, setExportFileName] = useState('');
+  const [exportColumns, setExportColumns] = useState({
+    name: true,
+    nationalId: true,
+    gender: true,
+    maritalStatus: true,
+    phoneNumber: true,
+    totalMembers: true,
+    camp: true,
+    vulnerability: true,
+    status: true,
+    location: true,
+    medical: true
+  });
 
   // Enhanced filters
   const [filterCamp, setFilterCamp] = useState<string>('all');
@@ -510,6 +563,189 @@ const DPManagement: React.FC = () => {
     totalCamps: camps.length
   };
 
+  const handleExport = async () => {
+    if (!exportFileName.trim()) {
+      setToast({ message: 'الرجاء إدخال اسم الملف', type: 'error' });
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('سجل العائلات المركزي', { views: [{ rightToLeft: true }] });
+
+      const statusText = activeTab === 'all' ? 'جميع العائلات' : activeTab === 'موافق' ? 'العائلات المعتمدة' : 'عائلات قيد الانتظار';
+
+      // 1. Add Title Row
+      const titleRow = worksheet.addRow([`تقرير السجل المركزي للنازحين (${statusText}) - الإدارة العامة`]);
+      titleRow.height = 35;
+      worksheet.addRow([]); // Empty row for spacing
+
+      // 2. Build Headers
+      const headers = [
+        'اسم رب الأسرة',
+        'رقم الهوية',
+        'المخيم',
+        'الجنس',
+        'الحالة الاجتماعية',
+        'عدد الأفراد',
+        'رقم الهاتف',
+        'رقم الوحدة',
+        'المحافظة',
+        'المنطقة',
+        'نوع السكن الحالي',
+        'العنوان الحالي',
+        'أيتام',
+        'أطفال',
+        'كبار سن',
+        'إعاقة',
+        'أمراض مزمنة',
+        'جرحى'
+      ];
+
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 25;
+      headerRow.eachCell((cell) => {
+        cell.font = { name: 'Arial', bold: true, color: { argb: 'FF374151' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF3F4F6' }
+        };
+        cell.border = {
+          top: {style:'thin', color: {argb:'FFD1D5DB'}},
+          left: {style:'thin', color: {argb:'FFD1D5DB'}},
+          bottom: {style:'thin', color: {argb:'FFD1D5DB'}},
+          right: {style:'thin', color: {argb:'FFD1D5DB'}}
+        };
+      });
+
+      // 3. Add Data Rows
+      filteredDPs.forEach((dp, index) => {
+        // Calculate counts if they are 0/missing (Fallback for reporting)
+        const hasMembers = dp.members && Array.isArray(dp.members);
+        
+        // 1. Children count (under 18)
+        let calcChildCount = dp.childCount || 0;
+        if (calcChildCount === 0 && hasMembers) {
+          calcChildCount = dp.members!.filter(m => m.age < 18).length;
+          if (dp.age < 18) calcChildCount++;
+          if (dp.wifeAge && dp.wifeAge < 18) calcChildCount++;
+        }
+
+        // 2. Seniors count (60+)
+        let calcSeniorCount = dp.seniorCount || 0;
+        if (calcSeniorCount === 0 && hasMembers) {
+          calcSeniorCount = dp.members!.filter(m => m.age >= 60).length;
+          if (dp.age >= 60) calcSeniorCount++;
+          if (dp.wifeAge && dp.wifeAge >= 60) calcSeniorCount++;
+        }
+
+        // 3. Disability count
+        let calcDisabledCount = dp.disabledCount || 0;
+        if (calcDisabledCount === 0) {
+          if (hasMembers) calcDisabledCount += dp.members!.filter(m => m.disabilityType && m.disabilityType !== 'لا يوجد').length;
+          if (dp.disabilityType && dp.disabilityType !== 'لا يوجد') calcDisabledCount++;
+          if (dp.wifeDisabilityType && dp.wifeDisabilityType !== 'لا يوجد') calcDisabledCount++;
+          if (dp.husbandDisabilityType && dp.husbandDisabilityType !== 'لا يوجد') calcDisabledCount++;
+        }
+
+        // 4. Chronic disease count
+        let calcChronicCount = dp.chronicCount || 0;
+        if (calcChronicCount === 0) {
+          if (hasMembers) calcChronicCount += dp.members!.filter(m => m.chronicDiseaseType && m.chronicDiseaseType !== 'لا يوجد').length;
+          if (dp.chronicDiseaseType && dp.chronicDiseaseType !== 'لا يوجد') calcChronicCount++;
+          if (dp.wifeChronicDiseaseType && dp.wifeChronicDiseaseType !== 'لا يوجد') calcChronicCount++;
+          if (dp.husbandChronicDiseaseType && dp.husbandChronicDiseaseType !== 'لا يوجد') calcChronicCount++;
+        }
+
+        // 5. Injured count
+        let calcInjuredCount = dp.injuredCount || 0;
+        if (calcInjuredCount === 0) {
+          if (hasMembers) calcInjuredCount += dp.members!.filter(m => m.hasWarInjury || (m.warInjuryType && m.warInjuryType !== 'لا يوجد')).length;
+          if (dp.hasWarInjury || (dp.warInjuryType && dp.warInjuryType !== 'لا يوجد')) calcInjuredCount++;
+          if (dp.wifeWarInjuryType && dp.wifeWarInjuryType !== 'لا يوجد') calcInjuredCount++;
+          if (dp.husbandWarInjuryType && dp.husbandWarInjuryType !== 'لا يوجد') calcInjuredCount++;
+        }
+
+        // 6. Orphan count (derived from members if orphan flag exists)
+        let calcOrphanCount = dp.orphanCount || 0;
+        if (calcOrphanCount === 0 && hasMembers) {
+          calcOrphanCount = dp.members!.filter(m => m.relation === 'يتيم' || m.isOrphan).length;
+        }
+
+        const rowData = [
+          getFullName(dp),
+          dp.nationalId,
+          getCampName(dp.campId || ''),
+          dp.gender,
+          dp.maritalStatus,
+          dp.totalMembersCount || 0,
+          dp.phoneNumber,
+          dp.unitNumber || 'غير محدد',
+          dp.currentHousingGovernorate || '-',
+          dp.currentHousingRegion || '-',
+          dp.currentHousingType || '-',
+          dp.currentHousingLandmark || '-',
+          calcOrphanCount,
+          calcChildCount,
+          calcSeniorCount,
+          calcDisabledCount,
+          calcChronicCount,
+          calcInjuredCount
+        ];
+
+        const dataRow = worksheet.addRow(rowData);
+        dataRow.eachCell((cell) => {
+          cell.alignment = { vertical: 'middle', horizontal: 'right', wrapText: true };
+          cell.border = {
+            top: {style:'thin', color: {argb:'FFE5E7EB'}},
+            left: {style:'thin', color: {argb:'FFE5E7EB'}},
+            bottom: {style:'thin', color: {argb:'FFE5E7EB'}},
+            right: {style:'thin', color: {argb:'FFE5E7EB'}}
+          };
+          if (index % 2 !== 0) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF9FAFB' }
+            };
+          }
+        });
+      });
+
+      // 4. Formatting
+      if (headers.length > 1) {
+        worksheet.mergeCells(1, 1, 1, headers.length);
+      }
+      const titleCell = worksheet.getCell('A1');
+      titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF059669' } // Emerald-600
+      };
+
+      worksheet.columns.forEach((column, index) => {
+        if (index === 0) {
+          column.width = 35; // Increased size for family name
+        } else {
+          column.width = 18;
+        }
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `${exportFileName}.xlsx`);
+      
+      setShowExportModal(false);
+      setToast({ message: 'تم تصدير الملف بنجاح', type: 'success' });
+    } catch (error) {
+      console.error('Export error:', error);
+      setToast({ message: 'فشل تصدير الملف', type: 'error' });
+    }
+  };
+
   if (loading && dps.length === 0) {
     return (
       <div className="space-y-6">
@@ -576,6 +812,21 @@ const DPManagement: React.FC = () => {
               الإدارة المركزية للعائلات
             </h1>
             <p className="text-gray-500 text-sm font-bold mt-1 mr-12">سجل العائلات المركزي عبر جميع المخيمات</p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => {
+                const dateStr = new Date().toLocaleDateString('en-GB').split('/').join('-');
+                const statusLabel = activeTab === 'all' ? 'كامل_السجل' : activeTab.replace(' ', '_');
+                setExportFileName(`السجل_المركزي_${statusLabel}_${dateStr}`);
+                setShowExportModal(true);
+              }}
+              disabled={loading || filteredDPs.length === 0}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-emerald-100 text-emerald-700 rounded-xl font-black hover:bg-emerald-50 transition-all shadow-sm w-full sm:w-auto disabled:opacity-50"
+            >
+              <Icons.Excel className="w-5 h-5" />
+              <span>تصدير Excel</span>
+            </button>
           </div>
         </div>
 
@@ -1213,6 +1464,62 @@ const DPManagement: React.FC = () => {
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-black hover:from-emerald-700 hover:to-teal-800 transition-all shadow-lg"
               >
                 استعادة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95" dir="rtl">
+            <div className="p-6 border-b-2 border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <Icons.Excel className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-black text-gray-800">تصدير العائلات إلى Excel</h3>
+              </div>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <Icons.Close className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">اسم الملف</label>
+                <input
+                  type="text"
+                  value={exportFileName}
+                  onChange={(e) => setExportFileName(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:bg-white focus:border-emerald-500 focus:outline-none font-bold transition-all"
+                  placeholder="أدخل اسم الملف..."
+                />
+              </div>
+
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                <p className="text-sm font-bold text-emerald-800 leading-relaxed">
+                  سيتم تصدير السجل المركزي لجميع المخيمات مع كافة التفاصيل (الهوية، المخيم، الهاتف، السكن، الإحصائيات، الحالات الصحية).
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t-2 border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-6 py-2.5 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleExport}
+                className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
+              >
+                تصدير الملف
               </button>
             </div>
           </div>
