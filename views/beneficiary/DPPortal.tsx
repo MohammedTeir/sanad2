@@ -303,7 +303,7 @@ const FIELD_NAME_TRANSLATIONS: { [key: string]: string } = {
   'head_father_name': 'اسم الأب',
   'head_grandfather_name': 'اسم الجد',
   'head_family_name': 'اسم العائلة',
-  'national_id': 'الرقم الوطني',
+  'national_id': 'رقم الهوية',
   'gender': 'الجنس',
   'date_of_birth': 'تاريخ الميلاد',
   'marital_status': 'الحالة الاجتماعية',
@@ -326,7 +326,7 @@ const FIELD_NAME_TRANSLATIONS: { [key: string]: string } = {
   'monthly_income': 'الدخل الشهري',
   'monthly_income_range': 'نطاق الدخل الشهري',
   'wife_name': 'اسم الزوجة',
-  'wife_national_id': 'الرقم الوطني للزوجة',
+  'wife_national_id': 'رقم الهوية للزوجة',
   'wife_date_of_birth': 'تاريخ ميلاد الزوجة',
   'wife_age': 'عمر الزوجة',
   'wife_is_pregnant': 'الزوجة حامل',
@@ -346,7 +346,7 @@ const FIELD_NAME_TRANSLATIONS: { [key: string]: string } = {
   'wife_war_injury_type': 'إصابة حرب الزوجة',
   'wife_war_injury_details': 'تفاصيل إصابة حرب الزوجة',
   'husband_name': 'اسم الزوج',
-  'husband_national_id': 'الرقم الوطني للزوج',
+  'husband_national_id': 'رقم الهوية للزوج',
   'husband_date_of_birth': 'تاريخ ميلاد الزوج',
   'husband_age': 'عمر الزوج',
   'husband_is_working': 'الزوج يعمل',
@@ -1728,14 +1728,14 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
     if (!editableData.headFatherName?.trim()) errors.headFatherName = 'اسم الأب مطلوب';
     if (!editableData.headGrandfatherName?.trim()) errors.headGrandfatherName = 'اسم الجد مطلوب';
     if (!editableData.headFamilyName?.trim()) errors.headFamilyName = 'اسم العائلة مطلوب';
-    if (!editableData.nationalId?.trim()) errors.nationalId = 'الرقم الوطني مطلوب';
+    if (!editableData.nationalId?.trim()) errors.nationalId = 'رقم الهوية مطلوب';
     if (!editableData.gender) errors.gender = 'الجنس مطلوب';
     if (!editableData.dateOfBirth) errors.dateOfBirth = 'تاريخ الميلاد مطلوب';
     if (!editableData.maritalStatus) errors.maritalStatus = 'الحالة الاجتماعية مطلوبة';
     if (!editableData.phoneNumber?.trim()) errors.phoneNumber = 'رقم الهاتف مطلوب';
 
     if (editableData.nationalId && !/^\d+$/.test(editableData.nationalId)) {
-      errors.nationalId = 'الرقم الوطني يجب أن يحتوي على أرقام فقط';
+      errors.nationalId = 'رقم الهوية يجب أن يحتوي على أرقام فقط';
     }
     if (editableData.phoneNumber && !/^[\d+\-\s()]+$/.test(editableData.phoneNumber)) {
       errors.phoneNumber = 'رقم الهاتف غير صحيح';
@@ -2087,14 +2087,14 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
     }
 
     if (!tempMember.nationalId) {
-      setToast({ message: 'الرقم الوطني مطلوب', type: 'error' });
+      setToast({ message: 'رقم الهوية مطلوب', type: 'error' });
       return;
     }
 
     // Validate national ID format (8-9 digits)
     const nationalIdRegex = /^\d{8,9}$/;
     if (!nationalIdRegex.test(tempMember.nationalId)) {
-      setToast({ message: 'الرقم الوطني يجب أن يتكون من 8-9 أرقام', type: 'error' });
+      setToast({ message: 'رقم الهوية يجب أن يتكون من 8-9 أرقام', type: 'error' });
       return;
     }
 
@@ -2668,7 +2668,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية</label>
                     {isEditMode && editableData ? (
                       isFieldEditable('head_of_family_national_id') ? (
                         <>
@@ -2855,7 +2855,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                     <span className="font-black text-gray-800">{getFullName(dp)}</span>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-gray-100">
-                    <span className="text-gray-500 font-bold text-sm">الرقم الوطني</span>
+                    <span className="text-gray-500 font-bold text-sm">رقم الهوية</span>
                     <span className="font-black text-gray-800 dir-ltr">{dp.nationalId}</span>
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-gray-100">
@@ -3172,7 +3172,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                       <tr className="bg-gray-50 border-b-2 border-gray-200">
                         <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">#</th>
                         <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الاسم الكامل</th>
-                        <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الرقم الوطني</th>
+                        <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">رقم الهوية</th>
                         <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الجنس</th>
                         <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">تاريخ الميلاد</th>
                         <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">العمر</th>
@@ -4648,7 +4648,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                           )}
                         </div>
                         <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني</label>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية</label>
                           {isFieldEditable('wife_national_id') ? (
                             <>
                               <input
@@ -4730,7 +4730,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                           )}
                         </div>
                         <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني</label>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية</label>
                           {isFieldEditable('husband_national_id') ? (
                             <>
                               <input
@@ -5532,7 +5532,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                         </div>
                         {dp.wifeNationalId && (
                           <div>
-                            <p className="text-gray-500 text-xs font-bold mb-1">الرقم الوطني</p>
+                            <p className="text-gray-500 text-xs font-bold mb-1">رقم الهوية</p>
                             <p className="font-black text-gray-800 dir-ltr">{dp.wifeNationalId}</p>
                           </div>
                         )}
@@ -5566,7 +5566,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                         </div>
                         {dp.husbandNationalId && (
                           <div>
-                            <p className="text-gray-500 text-xs font-bold mb-1">الرقم الوطني</p>
+                            <p className="text-gray-500 text-xs font-bold mb-1">رقم الهوية</p>
                             <p className="font-black text-gray-800 dir-ltr">{dp.husbandNationalId}</p>
                           </div>
                         )}
@@ -6123,7 +6123,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                   <p className="font-black text-gray-800">{getFullName(dp)}</p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-gray-500 font-bold text-sm mb-1">الرقم الوطني</p>
+                  <p className="text-gray-500 font-bold text-sm mb-1">رقم الهوية</p>
                   <p className="font-black text-gray-800 dir-ltr">{dp?.nationalId || 'غير متوفر'}</p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
@@ -6448,13 +6448,13 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
 
                   {/* National ID */}
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني *</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية *</label>
                     <input
                       type="text"
                       value={tempMember.nationalId || ''}
                       onChange={(e) => handleMemberChange('nationalId', e.target.value)}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                      placeholder="أدخل الرقم الوطني (8-9 أرقام)"
+                      placeholder="أدخل رقم الهوية (8-9 أرقام)"
                       dir="ltr"
                     />
                   </div>
@@ -6912,7 +6912,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                           <p className="font-black text-gray-800">{member.name || `${member.firstName} ${member.fatherName} ${member.grandfatherName} ${member.familyName}`.trim()}</p>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-xs font-bold mb-1">الرقم الوطني</p>
+                          <p className="text-gray-500 text-xs font-bold mb-1">رقم الهوية</p>
                           <p className="font-black text-gray-800 dir-ltr">{member.nationalId || '-'}</p>
                         </div>
                         <div>

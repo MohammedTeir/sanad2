@@ -81,7 +81,7 @@ const FIELD_GROUPS: FieldGroup[] = [
       { field: 'head_father_name', label: 'اسم الأب' },
       { field: 'head_grandfather_name', label: 'اسم الجد' },
       { field: 'head_family_name', label: 'اسم العائلة' },
-      { field: 'head_of_family_national_id', label: 'الرقم الوطني' },
+      { field: 'head_of_family_national_id', label: 'رقم الهوية' },
       { field: 'head_of_family_gender', label: 'الجنس' },
       { field: 'head_of_family_date_of_birth', label: 'تاريخ الميلاد' },
       { field: 'head_of_family_marital_status', label: 'الحالة الاجتماعية' },
@@ -133,10 +133,10 @@ const FIELD_GROUPS: FieldGroup[] = [
     fields: [
       // Spouse's basic info (gender-neutral - wife for male heads, husband for female heads)
       { field: 'wife_name', label: 'اسم الزوجة' },
-      { field: 'wife_national_id', label: 'الرقم الوطني للزوجة' },
+      { field: 'wife_national_id', label: 'رقم الهوية للزوجة' },
       { field: 'wife_date_of_birth', label: 'تاريخ ميلاد الزوجة' },
       { field: 'husband_name', label: 'اسم الزوج' },
-      { field: 'husband_national_id', label: 'الرقم الوطني للزوج' },
+      { field: 'husband_national_id', label: 'رقم الهوية للزوج' },
       { field: 'husband_date_of_birth', label: 'تاريخ ميلاد الزوج' },
     ]
   },

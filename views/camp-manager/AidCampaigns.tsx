@@ -1470,7 +1470,7 @@ const AidCampaigns: React.FC = () => {
                     <SearchInput
                       value={familySearchTerm}
                       onChange={setFamilySearchTerm}
-                      placeholder="ابحث باسم رب الأسرة، الرقم الوطني، رقم الهاتف..."
+                      placeholder="ابحث باسم رب الأسرة، رقم الهوية، رقم الهاتف..."
                       iconColor="emerald"
                       showArabicHint
                     />

@@ -316,7 +316,7 @@ const IndividualMedicalManagement: React.FC = () => {
             </div>
             <input
               type="text"
-              placeholder="ابحث بالاسم، الرقم الوطني، نوع المرض أو الإعاقة..."
+              placeholder="ابحث بالاسم، رقم الهوية، نوع المرض أو الإعاقة..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:bg-white focus:border-blue-500 focus:outline-none font-bold transition-all text-lg"
@@ -357,7 +357,7 @@ const IndividualMedicalManagement: React.FC = () => {
                     <td className="px-6 py-5">
                       <div className="flex flex-col">
                         <span className="font-black text-gray-800 text-lg">{ind.name}</span>
-                        <span className="text-xs text-gray-400 font-bold mt-1">ID: {ind.nationalId || 'غير متوفر'}</span>
+                        <span className="text-xs text-gray-400 font-bold mt-1">رقم الهوية: {ind.nationalId || 'غير متوفر'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-5">

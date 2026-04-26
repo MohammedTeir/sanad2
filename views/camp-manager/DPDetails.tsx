@@ -869,7 +869,7 @@ const DPDetails: React.FC = () => {
     if (!editableData.headFatherName?.trim()) errors.headFatherName = 'اسم الأب مطلوب';
     if (!editableData.headGrandfatherName?.trim()) errors.headGrandfatherName = 'اسم الجد مطلوب';
     if (!editableData.headFamilyName?.trim()) errors.headFamilyName = 'اسم العائلة مطلوب';
-    if (!editableData.nationalId?.trim()) errors.nationalId = 'الرقم الوطني مطلوب';
+    if (!editableData.nationalId?.trim()) errors.nationalId = 'رقم الهوية مطلوب';
     if (!editableData.gender) errors.gender = 'الجنس مطلوب';
     if (!editableData.dateOfBirth) errors.dateOfBirth = 'تاريخ الميلاد مطلوب';
     if (!editableData.maritalStatus) errors.maritalStatus = 'الحالة الاجتماعية مطلوبة';
@@ -877,7 +877,7 @@ const DPDetails: React.FC = () => {
 
     // National ID format validation (should be numeric)
     if (editableData.nationalId && !/^\d+$/.test(editableData.nationalId)) {
-      errors.nationalId = 'الرقم الوطني يجب أن يحتوي على أرقام فقط';
+      errors.nationalId = 'رقم الهوية يجب أن يحتوي على أرقام فقط';
     }
 
     // Phone number validation
@@ -1196,14 +1196,14 @@ const DPDetails: React.FC = () => {
     }
 
     if (!tempMember.nationalId) {
-      setToast({ message: 'الرقم الوطني مطلوب', type: 'error' });
+      setToast({ message: 'رقم الهوية مطلوب', type: 'error' });
       return;
     }
 
     // Validate national ID format (8-9 digits)
     const nationalIdRegex = /^\d{8,9}$/;
     if (!nationalIdRegex.test(tempMember.nationalId)) {
-      setToast({ message: 'الرقم الوطني يجب أن يتكون من 8-9 أرقام', type: 'error' });
+      setToast({ message: 'رقم الهوية يجب أن يتكون من 8-9 أرقام', type: 'error' });
       return;
     }
 
@@ -1642,7 +1642,7 @@ const DPDetails: React.FC = () => {
             <p className="text-2xl font-black">{dp && getFullName(dp)}</p>
           </div>
           <div>
-            <p className="text-blue-100 font-bold text-sm mb-2">الرقم الوطني</p>
+            <p className="text-blue-100 font-bold text-sm mb-2">رقم الهوية</p>
             <p className="text-2xl font-black tracking-wider">{dp.nationalId}</p>
           </div>
           <div>
@@ -1846,7 +1846,7 @@ const DPDetails: React.FC = () => {
 
                 {/* National ID */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني *</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية *</label>
                   <input
                     type="text"
                     value={editableData.nationalId || ''}
@@ -2735,7 +2735,7 @@ const DPDetails: React.FC = () => {
                   <tr className="bg-gray-50 border-b-2 border-gray-200">
                     <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">#</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الاسم الكامل</th>
-                    <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الرقم الوطني</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">رقم الهوية</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">الجنس</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">تاريخ الميلاد</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-gray-500 uppercase">العمر</th>
@@ -3295,13 +3295,13 @@ const DPDetails: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني للزوجة</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية للزوجة</label>
                       <input
                         type="text"
                         value={editableData.wifeNationalId || ''}
                         onChange={(e) => handleFieldChange('wifeNationalId', e.target.value)}
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                        placeholder="الرقم الوطني"
+                        placeholder="رقم الهوية"
                         dir="ltr"
                       />
                     </div>
@@ -3581,13 +3581,13 @@ const DPDetails: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني للزوج</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية للزوج</label>
                       <input
                         type="text"
                         value={editableData.husbandNationalId || ''}
                         onChange={(e) => handleFieldChange('husbandNationalId', e.target.value)}
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                        placeholder="الرقم الوطني"
+                        placeholder="رقم الهوية"
                         dir="ltr"
                       />
                     </div>
@@ -3803,7 +3803,7 @@ const DPDetails: React.FC = () => {
                   </div>
                   {dp.wifeNationalId && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-500 font-bold text-sm">الرقم الوطني</span>
+                      <span className="text-gray-500 font-bold text-sm">رقم الهوية</span>
                       <span className="font-black text-gray-800">{dp.wifeNationalId}</span>
                     </div>
                   )}
@@ -3933,7 +3933,7 @@ const DPDetails: React.FC = () => {
                   </div>
                   {dp.husbandNationalId && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-500 font-bold text-sm">الرقم الوطني</span>
+                      <span className="text-gray-500 font-bold text-sm">رقم الهوية</span>
                       <span className="font-black text-gray-800">{dp.husbandNationalId}</span>
                     </div>
                   )}
@@ -4282,13 +4282,13 @@ const DPDetails: React.FC = () => {
 
                   {/* National ID */}
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">الرقم الوطني *</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية *</label>
                     <input
                       type="text"
                       value={tempMember.nationalId || ''}
                       onChange={(e) => handleMemberChange('nationalId', e.target.value)}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-                      placeholder="أدخل الرقم الوطني (8-9 أرقام)"
+                      placeholder="أدخل رقم الهوية (8-9 أرقام)"
                       dir="ltr"
                     />
                   </div>
@@ -4744,7 +4744,7 @@ const DPDetails: React.FC = () => {
                           <p className="font-black text-gray-800">{member.name || `${member.firstName} ${member.fatherName} ${member.grandfatherName} ${member.familyName}`.trim()}</p>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-xs font-bold mb-1">الرقم الوطني</p>
+                          <p className="text-gray-500 text-xs font-bold mb-1">رقم الهوية</p>
                           <p className="font-black text-gray-800 dir-ltr">{member.nationalId || '-'}</p>
                         </div>
                         <div>

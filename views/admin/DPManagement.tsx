@@ -639,7 +639,7 @@ const DPManagement: React.FC = () => {
           <SearchInput
             value={searchTerm}
             onChange={setSearchTerm}
-            placeholder="ابحث بالاسم، الرقم الوطني، رقم الهاتف..."
+            placeholder="ابحث بالاسم، رقم الهوية، رقم الهاتف..."
           />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -838,7 +838,7 @@ const DPManagement: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     {/* National ID */}
                     <div className="bg-gray-50 rounded-xl p-3">
-                      <p className="text-xs text-gray-500 font-bold mb-1">الرقم الوطني</p>
+                      <p className="text-xs text-gray-500 font-bold mb-1">رقم الهوية</p>
                       <p className="font-black text-gray-800 text-sm" dir="ltr">{dp.nationalId}</p>
                     </div>
 
@@ -956,7 +956,7 @@ const DPManagement: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-right font-black text-gray-700">العائلة</th>
-                <th className="px-6 py-4 text-right font-black text-gray-700">الرقم الوطني</th>
+                <th className="px-6 py-4 text-right font-black text-gray-700">رقم الهوية</th>
                 <th className="px-6 py-4 text-right font-black text-gray-700">المخيم</th>
                 <th className="px-6 py-4 text-right font-black text-gray-700">عدد الأفراد</th>
                 <th className="px-6 py-4 text-right font-black text-gray-700">الهشاشة</th>

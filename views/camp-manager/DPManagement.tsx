@@ -907,7 +907,7 @@ const DPManagement: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-black text-gray-700 mb-2">الرقم الوطني *</label>
+                      <label className="block text-xs font-black text-gray-700 mb-2">رقم الهوية *</label>
                       <input
                         type="text"
                         name="nationalId"
@@ -1319,7 +1319,7 @@ const DPManagement: React.FC = () => {
               <SearchInput
                 value={searchTerm}
                 onChange={setSearchTerm}
-                placeholder="ابحث باسم رب الأسرة، الرقم الوطني، رقم الهاتف، المنطقة..."
+                placeholder="ابحث باسم رب الأسرة، رقم الهوية، رقم الهاتف، المنطقة..."
                 iconColor="blue"
                 showArabicHint
               />
