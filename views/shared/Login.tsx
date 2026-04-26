@@ -8,6 +8,7 @@ import { Role } from '../../types';
 import { realDataService } from '../../services/realDataServiceBackend';
 import { GradientCard, ProfessionalCard } from '../../components/ui';
 import Toast from '../../components/Toast';
+import Logo from '../../components/Logo';
 
 interface LoginProps {
   onLogin: (role: Role, id?: string) => void;
@@ -146,8 +147,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         {/* Hero Header */}
         <GradientCard variant="emerald" className="!rounded-b-[3rem] !p-8 md:!p-10">
           <div className="flex flex-col items-center">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-[2rem] mx-auto flex items-center justify-center text-4xl font-black mb-4 border border-white/20 shadow-xl">
-              <span>س</span>
+            <div className="mb-4">
+              <Logo size="lg" />
             </div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-1">سند</h1>
             <p className="text-emerald-100 font-bold text-xs md:text-sm opacity-90 text-center">

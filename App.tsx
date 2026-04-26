@@ -232,7 +232,12 @@ const Layout = ({ children, role, onLogout }: any) => {
             </h2>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
-             <span className="hidden md:inline-block text-[10px] bg-gray-100 px-3 py-1 rounded-full font-black text-gray-400 uppercase tracking-widest">{safeRole}</span>
+             <span className="hidden md:inline-block text-[10px] bg-gray-100 px-3 py-1 rounded-full font-black text-gray-400 uppercase tracking-widest">
+               {safeRole === Role.SYSTEM_ADMIN ? 'مشرف عام' : 
+                safeRole === Role.CAMP_MANAGER ? 'مدير مخيم' : 
+                safeRole === Role.FIELD_OFFICER ? 'موظف ميدان' : 
+                safeRole === Role.DONOR_OBSERVER ? 'مراقب' : 'مستفيد'}
+             </span>
              <div className="w-9 h-9 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 shadow-inner">
                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
              </div>
