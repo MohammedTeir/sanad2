@@ -24,13 +24,11 @@ A comprehensive dashboard has been created for Field Officers working in refugee
   - Families registered this week
   - Pending approvals count
   - Distributions completed
-  - Emergency reports submitted
 
 - **Quick Actions Grid:**
   - Register New Family (تسجيل أسرة جديدة)
   - Search Family (بحث عن أسرة)
   - Scan Distribution (مسح التوزيع)
-  - Emergency Report (بلاغ طارئ)
 
 - **Stats Cards:**
   - Total families with icon
@@ -76,45 +74,6 @@ A comprehensive dashboard has been created for Field Officers working in refugee
   - Vulnerability breakdown (if available)
   - Demographic distribution (male/female, age groups)
   - Action button to view full details
-
----
-
-### 3. Emergency Report Form (`/field/emergency-report`)
-
-**Location:** `views/field-officer/EmergencyReportForm.tsx`
-
-**Features:**
-- **Emergency Type Selection:**
-  - Medical (طبي)
-  - Security (أمني)
-  - Infrastructure (بنية تحتية)
-  - Family Case (حالة أسرية)
-  - Other (أخرى)
-
-- **Priority Level:**
-  - Normal (عادي)
-  - Urgent (عاجل)
-  - Very Emergency (طارئ جداً)
-
-- **Form Fields:**
-  - Title (required)
-  - Description (required, textarea)
-  - Location (required)
-  - Family Name (optional)
-  - Contact Phone (optional)
-
-- **Photo Upload:**
-  - File upload component
-  - Support for multiple photos (max 5)
-  - Max size 5MB per file
-  - Preview uploaded photos
-  - Remove photos option
-
-- **Submit Actions:**
-  - Cancel button (returns to dashboard)
-  - Submit button with loading state
-  - Success toast notification
-  - Auto-redirect after successful submission
 
 ---
 
@@ -166,7 +125,6 @@ All routes are protected and only accessible to users with `FIELD_OFFICER` role:
 /field/register                  → Dashboard (register section)
 /field/search                    → Family Search
 /field/scan                      → Distribution Scanner
-/field/emergency-report          → Emergency Report Form
 /field/register-family           → Full Family Registration Form
 /field/confirm                   → Dashboard (confirm section)
 ```
@@ -182,7 +140,6 @@ The Field Officer sidebar includes:
 - تسجيل ميداني (Register)   → /field/register
 - بحث عن أسرة (Search)      → /field/search
 - مسح التوزيع (Scan)        → /field/scan
-- بلاغ طارئ (Emergency)     → /field/emergency-report
 ```
 
 ---
@@ -237,9 +194,6 @@ GET  /aid/campaigns?campId={campId}      → Get distribution campaigns
 // Distributions
 POST /aid/distributions/batch            → Submit multiple distributions
 GET  /aid/distributions/family/:familyId → Get family distribution history
-
-// Reports
-POST /reports/emergency                  → Submit emergency report
 ```
 
 ### State Management
@@ -260,7 +214,6 @@ POST /reports/emergency                  → Submit emergency report
 ✅ Add new members to existing families
 ✅ Search and view family data
 ✅ Record aid distributions
-✅ Submit emergency reports
 ✅ View distribution history
 
 ### What Field Officers CANNOT Do:
@@ -283,7 +236,6 @@ POST /reports/emergency                  → Submit emergency report
 views/field-officer/
 ├── FieldOfficerDashboard.tsx    # Main dashboard with KPIs
 ├── FamilySearch.tsx             # Search and filter families
-├── EmergencyReportForm.tsx      # Submit emergency reports
 ├── DistributionScannerMode.tsx  # Distribution scanning
 └── RegisterFamily.tsx           # Full family registration (existing)
 ```
@@ -324,25 +276,9 @@ npm run build
    - [ ] Priority filter works
    - [ ] Family details modal opens correctly
    - [ ] Vulnerability breakdown displays
-
-3. **Emergency Report:**
-   - [ ] Emergency type selection works
-   - [ ] Priority selection works
-   - [ ] Form validation works
-   - [ ] Photo upload works
-   - [ ] Submit creates report
-   - [ ] Success notification appears
-
-4. **Distribution Scanner:**
-   - [ ] Campaign selection loads
-   - [ ] Manual ID input works
-   - [ ] Family lookup works
-   - [ ] Scanned list updates
-   - [ ] Batch submit works
-   - [ ] Success modal appears
+- Success modal appears
 
 ### Edge Cases to Test
-
 - No camp ID assigned (show error)
 - No families in camp (show empty state)
 - No active campaigns (show message)

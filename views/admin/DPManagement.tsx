@@ -164,7 +164,7 @@ const DPManagement: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'قيد الانتظار' | 'موافق' | 'مرفوض'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  const [activeTab, setActiveTab] = useState<'all' | 'قيد الانتظار'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'قيد الانتظار' | 'موافق'>('all');
 
   // Enhanced filters
   const [filterCamp, setFilterCamp] = useState<string>('all');
@@ -383,7 +383,10 @@ const DPManagement: React.FC = () => {
       (dp.maritalStatus && filterMaritalStatusMulti.includes(dp.maritalStatus));
 
     const matchesStatus = filterStatus === 'all' || dp.registrationStatus === filterStatus;
-    const matchesTab = activeTab === 'all' || dp.registrationStatus === 'قيد الانتظار';
+    const matchesTab = 
+      activeTab === 'all' || 
+      (activeTab === 'قيد الانتظار' && dp.registrationStatus === 'قيد الانتظار') ||
+      (activeTab === 'موافق' && dp.registrationStatus === 'موافق');
 
     const matchesCamp = filterCamp === 'all' || dp.campId === filterCamp;
 
@@ -768,6 +771,21 @@ const DPManagement: React.FC = () => {
             جميع العائلات ({dps.length})
           </button>
           <button
+            onClick={() => { setActiveTab('موافق'); setCurrentPage(1); }}
+            className={`flex-1 px-6 py-4 font-black transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'موافق'
+                ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
+                : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            المعتمدة
+            {stats.byStatus['موافق'] > 0 && (
+              <span className="px-2 py-1 bg-blue-500 text-white text-xs font-black rounded-full">
+                {stats.byStatus['موافق']}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => { setActiveTab('قيد الانتظار'); setCurrentPage(1); }}
             className={`flex-1 px-6 py-4 font-black transition-all flex items-center justify-center gap-2 ${
               activeTab === 'قيد الانتظار'
@@ -776,9 +794,9 @@ const DPManagement: React.FC = () => {
             }`}
           >
             قيد الانتظار
-            {stats.pending > 0 && (
+            {stats.byStatus['قيد الانتظار'] > 0 && (
               <span className="px-2 py-1 bg-amber-500 text-white text-xs font-black rounded-full">
-                {stats.pending}
+                {stats.byStatus['قيد الانتظار']}
               </span>
             )}
           </button>

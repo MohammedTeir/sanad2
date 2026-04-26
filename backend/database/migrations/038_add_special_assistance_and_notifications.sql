@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     related_entity_id UUID,
     related_entity_type VARCHAR(50),
     read_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ============================================

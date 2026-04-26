@@ -33,6 +33,7 @@ import DistributionDetails from './views/camp-manager/DistributionDetails';
 import DistributionHistory from './views/camp-manager/DistributionHistory';
 import DistributionManagement from './views/camp-manager/DistributionManagement';
 import DPManagement from './views/camp-manager/DPManagement';
+import IndividualMedicalManagement from './views/camp-manager/IndividualMedicalManagement';
 import DPDetails from './views/camp-manager/DPDetails';
 import TransferRequests from './views/camp-manager/TransferRequests';
 import AidTypesConfig from './views/camp-manager/AidTypesConfig';
@@ -53,7 +54,6 @@ import FO_DistributionList from './views/field-officer/DistributionList';
 import FO_DistributionDetails from './views/field-officer/DistributionDetails';
 import FO_DistributionHistory from './views/field-officer/DistributionHistory';
 import FamilySearch from './views/field-officer/FamilySearch';
-import EmergencyReportForm from './views/field-officer/EmergencyReportForm';
 
 // Views - Donor Observer
 import DonorObserverDashboard from './views/donor/DonorObserverDashboard';
@@ -109,6 +109,7 @@ const Sidebar = ({ role, onLogout, isOpen, setIsOpen }: { role: Role, onLogout: 
           icon: ICONS.Users,
           items: [
             { label: 'إدارة العائلات', icon: ICONS.Users, path: '/manager/dp-management' },
+            { label: 'المتابعة الصحية للأفراد', icon: ICONS.Medical, path: '/manager/individual-medical' },
             { label: 'طلبات النقل', icon: ICONS.Inventory, path: '/manager/transfer-requests' },
           ]
         },
@@ -154,7 +155,6 @@ const Sidebar = ({ role, onLogout, isOpen, setIsOpen }: { role: Role, onLogout: 
       { label: 'بحث عن أسرة', icon: ICONS.Users, path: '/field/search' },
       { label: 'إدارة التوزيع', icon: ICONS.Inventory, path: '/field/distribution' },
       { label: 'سجل التوزيعات', icon: ICONS.Inventory, path: '/field/distribution-history' },
-      { label: 'بلاغ طارئ', icon: ICONS.Chart, path: '/field/emergency-report' },
     ],
     [Role.DONOR_OBSERVER]: [
       { label: 'لوحة التحكم', icon: ICONS.Home, path: '/donor' },
@@ -495,6 +495,7 @@ export default function App() {
                               <Route path="/manager/distribution-history" element={<DistributionHistory />} />
                               <Route path="/manager/distribution-management" element={<DistributionManagement />} />
                               <Route path="/manager/dp-management" element={<DPManagement />} />
+                              <Route path="/manager/individual-medical" element={<IndividualMedicalManagement />} />
                               <Route path="/manager/dp-details/:id" element={<DPDetails />} />
                               <Route path="/manager/transfer-requests" element={<TransferRequests />} />
                               <Route path="/manager/complaints" element={<ComplaintsManagement />} />
@@ -513,7 +514,6 @@ export default function App() {
                               <Route path="/field/distribution/:campaignId" element={<FO_DistributionDetails />} />
                               <Route path="/field/distribution-history" element={<FO_DistributionHistory />} />
                               <Route path="/field/search" element={<FamilySearch />} />
-                              <Route path="/field/emergency-report" element={<EmergencyReportForm />} />
                               <Route path="/field/register-family" element={<RegisterFamily />} />
                               <Route path="*" element={<Navigate to="/field" />} />
                             </>

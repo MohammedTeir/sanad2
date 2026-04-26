@@ -5,7 +5,7 @@ import { realDataService } from '../../services/realDataServiceBackend';
 import { sessionService } from '../../services/sessionService';
 import Toast from '../../components/Toast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { SearchInput } from '../../components/filters';
+import { SearchInput, MultiSelectFilter, FilterPanel } from '../../components/filters';
 import { matchesArabicSearchMulti } from '../../utils/arabicTextUtils';
 
 interface AidCampaign {
@@ -27,6 +27,16 @@ interface AidCampaign {
   updatedAt: string;
 }
 
+interface Camp {
+  id: string;
+  name: string;
+  location?: {
+    governorate?: string;
+    area?: string;
+    address?: string;
+  };
+}
+
 interface Family {
   id: string;
   headOfFamily: string; // Short name (head_of_family_name)
@@ -35,6 +45,7 @@ interface Family {
   headGrandfatherName?: string;
   headFamilyName?: string;
   phoneNumber?: string;
+  nationalId?: string;
   totalMembersCount: number;
   currentHousing?: {
     campId?: string;
@@ -131,6 +142,7 @@ const DistributionDetails: React.FC = () => {
 
   const [campaign, setCampaign] = useState<AidCampaign | null>(null);
   const [families, setFamilies] = useState<Family[]>([]);
+  const [camps, setCamps] = useState<Camp[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [distributionHistory, setDistributionHistory] = useState<DistributionRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,6 +168,10 @@ const DistributionDetails: React.FC = () => {
   // History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
+  // Family details modal state
+  const [showFamilyDetailsModal, setShowFamilyDetailsModal] = useState(false);
+  const [selectedFamilyForDetails, setSelectedFamilyForDetails] = useState<Family | null>(null);
+
   // Undo state
   const [lastDistribution, setLastDistribution] = useState<{ distributionId: string; timestamp: number; campaignId: string; familyId: string; quantity: number } | null>(null);
 
@@ -167,6 +183,12 @@ const DistributionDetails: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+
+  // Enhanced filters
+  const [activeTab, setActiveTab] = useState<'all' | 'not_received' | 'received'>('all');
+  const [filterFamilySizeMin, setFilterFamilySizeMin] = useState<string>('');
+  const [filterFamilySizeMax, setFilterFamilySizeMax] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Load current user's camp ID on mount
   useEffect(() => {
@@ -217,6 +239,7 @@ const DistributionDetails: React.FC = () => {
         headGrandfatherName: f.headGrandfatherName,
         headFamilyName: f.headFamilyName,
         phoneNumber: f.phoneNumber,
+        nationalId: f.nationalId || (f as any).national_id || (f as any).head_of_family_national_id,
         totalMembersCount: f.totalMembersCount,
         currentHousing: f.currentHousing
       }));
@@ -226,6 +249,16 @@ const DistributionDetails: React.FC = () => {
       setToast({ message: err.message || 'فشل تحميل العائلات', type: 'error' });
     }
   }, [currentCampId]);
+
+  // Load camps
+  const loadCamps = useCallback(async () => {
+    try {
+      const loadedCamps = await realDataService.getCamps();
+      setCamps(loadedCamps);
+    } catch (err: any) {
+      console.error('Error loading camps:', err);
+    }
+  }, []);
 
   // Load inventory items
   const loadInventoryItems = useCallback(async () => {
@@ -278,11 +311,12 @@ const DistributionDetails: React.FC = () => {
       Promise.all([
         loadCampaign(),
         loadFamilies(),
+        loadCamps(),
         loadInventoryItems(),
         loadDistributionHistory()
       ]).finally(() => setLoading(false));
     }
-  }, [currentCampId, campaignId, loadCampaign, loadFamilies, loadInventoryItems, loadDistributionHistory]);
+  }, [currentCampId, campaignId, loadCampaign, loadFamilies, loadCamps, loadInventoryItems, loadDistributionHistory]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -321,6 +355,31 @@ const DistributionDetails: React.FC = () => {
     return parts.length > 0 ? parts.join(' ') : family.headOfFamily;
   };
 
+  // Helper function to get camp name
+  const getCampName = (campId?: string): string => {
+    if (!campId) return 'غير محدد';
+    const camp = camps.find(c => 
+      c.id === campId || 
+      (c as any).camp_id === campId ||
+      c.id?.toLowerCase() === campId.toLowerCase() ||
+      (c as any).camp_id?.toLowerCase() === campId.toLowerCase()
+    );
+    
+    if (camp) return camp.name || (camp as any).camp_name || camp.id;
+    return campId;
+  };
+
+  // Helper function to get camp details
+  const getCampDetails = (campId?: string) => {
+    if (!campId) return null;
+    return camps.find(c => 
+      c.id === campId || 
+      (c as any).camp_id === campId ||
+      c.id?.toLowerCase() === campId.toLowerCase() ||
+      (c as any).camp_id?.toLowerCase() === campId.toLowerCase()
+    );
+  };
+
   // Helper function to get full name from distribution record
   const getFullHeadNameFromDistribution = (familyId: string): string => {
     const family = families.find(f => f.id === familyId);
@@ -334,12 +393,24 @@ const DistributionDetails: React.FC = () => {
   const getFilteredFamilies = () => {
     const targetFamilies = getTargetFamilies();
     return targetFamilies.filter(family => {
+      const received = hasReceivedAid(family.id);
+
       const matchesSearch = searchTerm === '' || matchesArabicSearchMulti(searchTerm, [
         family.headOfFamily,
         getFullHeadName(family),
-        family.phoneNumber || ''
+        family.phoneNumber || '',
+        family.nationalId || ''
       ]);
-      return matchesSearch;
+
+      const matchesTab = 
+        activeTab === 'all' || 
+        (activeTab === 'received' && received) || 
+        (activeTab === 'not_received' && !received);
+
+      const matchesFamilySizeMin = filterFamilySizeMin === '' || family.totalMembersCount >= parseInt(filterFamilySizeMin);
+      const matchesFamilySizeMax = filterFamilySizeMax === '' || family.totalMembersCount <= parseInt(filterFamilySizeMax);
+
+      return matchesSearch && matchesTab && matchesFamilySizeMin && matchesFamilySizeMax;
     });
   };
 
@@ -938,16 +1009,107 @@ const DistributionDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search and Filters */}
       <div className="bg-white rounded-[2rem] border shadow-sm p-6">
-        <SearchInput
-          value={searchTerm}
-          onChange={setSearchTerm}
-          placeholder="ابحث عن أسرة..."
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => {
+              setActiveTab('all');
+              setCurrentPage(1);
+            }}
+            className={`px-6 py-2 rounded-xl font-bold transition-all ${
+              activeTab === 'all'
+                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg'
+                : 'bg-gray-50 text-gray-700 border-2 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            الكل ({getTargetFamilies().length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('not_received');
+              setCurrentPage(1);
+            }}
+            className={`px-6 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'not_received'
+                ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg'
+                : 'bg-gray-50 text-gray-700 border-2 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${activeTab === 'not_received' ? 'bg-white' : 'bg-red-500'}`}></div>
+            لم يستلم ({getTargetFamilies().filter(f => !hasReceivedAid(f.id)).length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('received');
+              setCurrentPage(1);
+            }}
+            className={`px-6 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'received'
+                ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-lg'
+                : 'bg-gray-50 text-gray-700 border-2 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${activeTab === 'received' ? 'bg-white' : 'bg-emerald-500'}`}></div>
+            تم الاستلام ({getTargetFamilies().filter(f => hasReceivedAid(f.id)).length})
+          </button>
+        </div>
+
+        <FilterPanel
+          title="تصفية المستفيدين"
+          activeFilters={[
+            ...(searchTerm ? [{ id: 'search', label: `بحث: "${searchTerm}"`, value: searchTerm, onRemove: () => setSearchTerm('') }] : []),
+            ...(filterFamilySizeMin || filterFamilySizeMax ? [{ id: 'familySize', label: `حجم الأسرة: ${filterFamilySizeMin || '0'}-${filterFamilySizeMax || '∞'}`, value: 'familySize', onRemove: () => { setFilterFamilySizeMin(''); setFilterFamilySizeMax(''); } }] : [])
+          ]}
+          onClearAll={() => {
+            setSearchTerm('');
+            setFilterFamilySizeMin('');
+            setFilterFamilySizeMax('');
+            setActiveTab('all');
+          }}
+          defaultOpen={showFilters}
           iconColor="amber"
-        />
-        <p className="text-xs text-gray-500 font-bold mt-2">
-          عرض {filteredFamilies.length} من {getTargetFamilies().length} أسرة
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="ابحث باسم رب الأسرة، رقم الهوية، رقم الهاتف..."
+                iconColor="amber"
+                showArabicHint
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2">حجم الأسرة (من)</label>
+                <input
+                  type="number"
+                  value={filterFamilySizeMin}
+                  onChange={(e) => setFilterFamilySizeMin(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-700 mb-2">حجم الأسرة (إلى)</label>
+                <input
+                  type="number"
+                  value={filterFamilySizeMax}
+                  onChange={(e) => setFilterFamilySizeMax(e.target.value)}
+                  placeholder="∞"
+                  min="0"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all font-bold"
+                />
+              </div>
+            </div>
+          </div>
+        </FilterPanel>
+
+        <p className="text-xs text-gray-500 font-bold mt-4">
+          عرض {filteredFamilies.length} من أصل {getTargetFamilies().length} أسرة مستهدفة
         </p>
       </div>
 
@@ -967,7 +1129,12 @@ const DistributionDetails: React.FC = () => {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
-                    <p className="font-black text-gray-800">{getFullHeadName(family)}</p>
+                    <p className="font-black text-gray-800">
+                      {getFullHeadName(family)}
+                      {family.nationalId && (
+                        <span className="text-gray-400 font-bold text-xs mr-2" dir="ltr">({family.nationalId})</span>
+                      )}
+                    </p>
                     {received ? (
                       <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-black flex items-center gap-1">
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -998,17 +1165,32 @@ const DistributionDetails: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleOpenDistribution(family)}
-                  disabled={received || (campaign.status !== 'نشطة' && campaign.status !== 'مخططة')}
-                  className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                    received || (campaign.status !== 'نشطة' && campaign.status !== 'مخططة')
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700 shadow-md hover:shadow-lg'
-                  }`}
-                >
-                  {received ? 'تم التوزيع' : 'توزيع'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedFamilyForDetails(family);
+                      setShowFamilyDetailsModal(true);
+                    }}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                    title="تفاصيل الأسرة"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleOpenDistribution(family)}
+                    disabled={received || (campaign.status !== 'نشطة' && campaign.status !== 'مخططة')}
+                    className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                      received || (campaign.status !== 'نشطة' && campaign.status !== 'مخططة')
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700 shadow-md hover:shadow-lg'
+                    }`}
+                  >
+                    {received ? 'تم التوزيع' : 'توزيع'}
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -1232,6 +1414,112 @@ const DistributionDetails: React.FC = () => {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Family Details Modal */}
+      {showFamilyDetailsModal && selectedFamilyForDetails && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95">
+            <div className="p-6 md:p-8">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3">
+                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  تفاصيل الأسرة
+                </h2>
+                <button
+                  onClick={() => setShowFamilyDetailsModal(false)}
+                  className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold mb-1">اسم رب الأسرة</p>
+                    <p className="font-black text-gray-800 text-lg">{getFullHeadName(selectedFamilyForDetails)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold mb-1">رقم الهوية</p>
+                    <p className="font-black text-gray-800 text-lg dir-ltr">{selectedFamilyForDetails.nationalId || 'غير متوفر'}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold mb-1">رقم الهاتف</p>
+                    <p className="font-black text-gray-800 text-lg dir-ltr">{selectedFamilyForDetails.phoneNumber || 'غير متوفر'}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-100">
+                    <p className="text-xs text-gray-500 font-bold mb-1">عدد أفراد الأسرة</p>
+                    <p className="font-black text-gray-800 text-lg">{selectedFamilyForDetails.totalMembersCount} أفراد</p>
+                  </div>
+                  {selectedFamilyForDetails.currentHousing && (
+                    <div className="md:col-span-2 bg-amber-50 p-4 rounded-2xl border-2 border-amber-100">
+                      <p className="text-xs text-amber-600 font-bold mb-3">معلومات الموقع الحالي</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">المخيم</p>
+                          <p className="font-black text-amber-900">{getCampName(selectedFamilyForDetails.currentHousing.campId)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">رقم الوحدة</p>
+                          <p className="font-black text-amber-900">{selectedFamilyForDetails.currentHousing.unitNumber || 'غير محدد'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">المحافظة</p>
+                          <p className="font-black text-amber-900">
+                            {getCampDetails(selectedFamilyForDetails.currentHousing.campId)?.location?.governorate || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.governorate || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.location_governorate ||
+                             'غير محدد'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">المنطقة</p>
+                          <p className="font-black text-amber-900">
+                            {getCampDetails(selectedFamilyForDetails.currentHousing.campId)?.location?.area || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.area || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.location_area ||
+                             'غير محدد'}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">العنوان التفصيلي</p>
+                          <p className="font-black text-amber-900">
+                            {getCampDetails(selectedFamilyForDetails.currentHousing.campId)?.location?.address || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.address || 
+                             (getCampDetails(selectedFamilyForDetails.currentHousing.campId) as any)?.location_address ||
+                             'غير محدد'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 mt-8 pt-6 border-t border-gray-100">
+                  <button
+                    onClick={() => setShowFamilyDetailsModal(false)}
+                    className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                  >
+                    إغلاق
+                  </button>
+                  <Link
+                    to={`/manager/dp-details/${selectedFamilyForDetails.id}`}
+                    className="flex-[2] px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-center hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                  >
+                    عرض الملف الكامل
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </div>

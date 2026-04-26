@@ -7,7 +7,7 @@ const { getMessage, getDatabaseErrorMessage } = require('../utils/arabicMessages
 const router = express.Router();
 
 // Get all camps (accessible to authorized users)
-router.get('/', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER'], 'camps', 'read'), async (req, res, next) => {
+router.get('/', authenticateToken, authorizeRoleOnly(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER']), async (req, res, next) => {
   try {
     let query = supabase.from('camps').select('*');
 
@@ -65,7 +65,7 @@ router.get('/my-camp', authenticateToken, authorizeRoleOnly(['SYSTEM_ADMIN', 'CA
 });
 
 // Get camp by ID
-router.get('/:campId', ...authorizeResourceAction(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER'], 'camps', 'read'), async (req, res, next) => {
+router.get('/:campId', authenticateToken, authorizeRoleOnly(['SYSTEM_ADMIN', 'CAMP_MANAGER', 'FIELD_OFFICER']), async (req, res, next) => {
   try {
     const { campId } = req.params;
 

@@ -695,7 +695,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     channel VARCHAR(50) DEFAULT 'تطبيق' CHECK (channel IN ('تطبيق', 'رسالة_نصية', 'بريد_إلكتروني', 'إشعار_دفع')),
     is_processed BOOLEAN DEFAULT TRUE,
     read_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Indexes for performance
@@ -1029,6 +1030,9 @@ BEGIN
     BEFORE UPDATE ON special_assistance_requests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
   END IF;
+
+  -- Ensure notifications table has updated_at column for the trigger
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_trigger

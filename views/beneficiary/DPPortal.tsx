@@ -2545,37 +2545,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
         {activeTab === 'basic' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* Vulnerability Score - High Impact Gradient Block */}
-            {(dp.vulnerabilityScore || dp.vulnerabilityPriority) && (
-              <div className="lg:col-span-2">
-                <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 p-6 shadow-xl shadow-orange-900/20 text-white">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/10 rounded-full blur-2xl"></div>
-                  <div className="relative">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-black flex items-center gap-2">
-                        <Icons.Shield className="w-6 h-6" />
-                        مستوى الهشاشة
-                      </h3>
-                      {dp.vulnerabilityPriority && (
-                        <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full font-black text-sm">
-                          {VULNERABILITY_LEVELS[dp.vulnerabilityPriority as keyof typeof VULNERABILITY_LEVELS]?.label || dp.vulnerabilityPriority}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-end gap-4">
-                      <div className="text-6xl font-black">{dp.vulnerabilityScore || 0}</div>
-                      <div className="text-white/80 font-bold mb-2">من 100</div>
-                    </div>
-                    {dp.vulnerabilityReason && (
-                      <div className="mt-4 p-3 bg-white/10 backdrop-blur-sm rounded-xl">
-                        <p className="text-sm font-bold">{dp.vulnerabilityReason}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+
 
             {/* Registration Status */}
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl shadow-indigo-900/5 p-6">
@@ -6214,15 +6184,9 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <p className="text-gray-500 font-bold text-sm mb-1">الموقع</p>
-                      <p className="font-black text-gray-800">{campInfo.location?.address || 'غير محدد'}</p>
-                    </div>
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <p className="text-gray-500 font-bold text-sm mb-1">الحالة</p>
-                      <p className="font-black text-gray-800">{campInfo.status}</p>
-                    </div>
+                  <div className="p-4 bg-gray-50 rounded-xl">
+                    <p className="text-gray-500 font-bold text-sm mb-1">الحالة</p>
+                    <p className="font-black text-gray-800">{campInfo.status}</p>
                   </div>
                 </div>
               ) : (
@@ -6233,63 +6197,7 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
               )}
             </div>
 
-            {/* Vulnerability Score Section */}
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl shadow-indigo-900/5 p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                  <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
-                    <Icons.Chart className="w-4 h-4" />
-                  </div>
-                  تفاصيل درجة الهشاشة
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowVulnerabilityBreakdown(!showVulnerabilityBreakdown);
-                    if (!showVulnerabilityBreakdown) loadVulnerabilityBreakdown();
-                  }}
-                  className="text-sm font-bold text-purple-600 hover:text-purple-700"
-                >
-                  {showVulnerabilityBreakdown ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
-                </button>
-              </div>
-              <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-100">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-purple-600 font-bold text-sm mb-1">درجة الهشاشة</p>
-                    <p className="text-4xl font-black text-purple-700">{dp?.vulnerabilityScore || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-600 font-bold text-sm mb-1">مستوى الأولوية</p>
-                    <span className={`px-4 py-2 rounded-full font-black ${
-                      dp?.vulnerabilityPriority === 'عالي جداً' ? 'bg-red-100 text-red-700' :
-                      dp?.vulnerabilityPriority === 'عالي' ? 'bg-orange-100 text-orange-700' :
-                      dp?.vulnerabilityPriority === 'متوسط' ? 'bg-amber-100 text-amber-700' :
-                      'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {dp?.vulnerabilityPriority || 'غير محدد'}
-                    </span>
-                  </div>
-                </div>
-                {dp?.vulnerabilityReason && (
-                  <p className="text-sm text-purple-700 font-bold">{dp.vulnerabilityReason}</p>
-                )}
-              </div>
-              {showVulnerabilityBreakdown && Object.keys(vulnerabilityBreakdown).length > 0 && (
-                <div className="mt-4 space-y-3">
-                  <p className="font-black text-gray-700 text-sm mb-2">تفاصيل الاحتساب:</p>
-                  {Object.entries(vulnerabilityBreakdown)
-                    .filter(([key]) => key !== 'weights') // Exclude the weights object from display
-                    .map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                      <span className="text-sm font-bold text-gray-700">
-                        {FIELD_NAME_TRANSLATIONS[key] || key}
-                      </span>
-                      <span className="font-black text-purple-700">+{typeof value === 'number' ? value.toFixed(1) : value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+
 
             {/* Transfer Request Section */}
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl shadow-indigo-900/5 p-6">
@@ -6342,16 +6250,16 @@ const DPPortal: React.FC<DPPortalProps> = ({ onLogout }) => {
                     <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                       <div className="flex items-center gap-2 mb-2">
                         <span className={`px-2 py-1 rounded text-xs font-black ${
-                          req.assistanceType === 'medical' ? 'bg-red-100 text-red-700' :
-                          req.assistanceType === 'financial' ? 'bg-emerald-100 text-emerald-700' :
-                          req.assistanceType === 'housing' ? 'bg-blue-100 text-blue-700' :
-                          req.assistanceType === 'educational' ? 'bg-purple-100 text-purple-700' :
+                          (req.assistanceType === 'medical' || req.assistanceType === 'طبية') ? 'bg-red-100 text-red-700' :
+                          (req.assistanceType === 'financial' || req.assistanceType === 'مالية') ? 'bg-emerald-100 text-emerald-700' :
+                          (req.assistanceType === 'housing' || req.assistanceType === 'سكنية') ? 'bg-blue-100 text-blue-700' :
+                          (req.assistanceType === 'educational' || req.assistanceType === 'تعليمية') ? 'bg-purple-100 text-purple-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
-                          {req.assistanceType === 'medical' ? 'طبية' :
-                           req.assistanceType === 'financial' ? 'مالية' :
-                           req.assistanceType === 'housing' ? 'سكنية' :
-                           req.assistanceType === 'educational' ? 'تعليمية' :
+                          {(req.assistanceType === 'medical' || req.assistanceType === 'طبية') ? 'طبية' :
+                           (req.assistanceType === 'financial' || req.assistanceType === 'مالية') ? 'مالية' :
+                           (req.assistanceType === 'housing' || req.assistanceType === 'سكنية') ? 'سكنية' :
+                           (req.assistanceType === 'educational' || req.assistanceType === 'تعليمية') ? 'تعليمية' :
                            'أخرى'}
                         </span>
                         <span className={`px-2 py-1 rounded text-xs font-black ${

@@ -20,6 +20,10 @@ CHECK (channel IN ('تطبيق', 'رسالة_نصية', 'بريد_إلكترون
 ALTER TABLE notifications 
 ADD COLUMN IF NOT EXISTS is_processed BOOLEAN DEFAULT TRUE;
 
+-- Add updated_at column for triggers
+ALTER TABLE notifications
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
 -- Update notification_type constraint to include new types (Arabic values)
 -- Note: We need to drop and recreate the constraint
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_notification_type_check;

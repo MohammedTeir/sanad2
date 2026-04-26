@@ -162,7 +162,7 @@ const DPManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [currentCampId, setCurrentCampId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'all' | 'قيد الانتظار'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'قيد الانتظار' | 'موافق'>('all');
 
   // Enhanced filters
   const [filterGovernorate, setFilterGovernorate] = useState<string>('all');
@@ -547,7 +547,10 @@ const DPManagement: React.FC = () => {
       (dp.maritalStatus && filterMaritalStatusMulti.includes(dp.maritalStatus));
 
     const matchesStatus = filterStatus === 'all' || dp.registrationStatus === filterStatus;
-    const matchesTab = activeTab === 'all' || dp.registrationStatus === 'قيد الانتظار';
+    const matchesTab = 
+      activeTab === 'all' || 
+      (activeTab === 'قيد الانتظار' && dp.registrationStatus === 'قيد الانتظار') ||
+      (activeTab === 'موافق' && dp.registrationStatus === 'موافق');
 
     // Geographic filters
     const matchesGovernorate = filterGovernorate === 'all' ||
@@ -673,7 +676,8 @@ const DPManagement: React.FC = () => {
     female: dps.filter(d => d.gender === 'أنثى').length,
     highVulnerability: dps.filter(d => d.vulnerabilityPriority === 'عالي جداً' || d.vulnerabilityPriority === 'عالي').length,
     avgFamilySize: dps.length > 0 ? Math.round(dps.reduce((sum, d) => sum + d.totalMembersCount, 0) / dps.length) : 0,
-    pending: dps.filter(d => d.registrationStatus === 'قيد الانتظار').length
+    pending: dps.filter(d => d.registrationStatus === 'قيد الانتظار').length,
+    approved: dps.filter(d => d.registrationStatus === 'موافق').length
   };
 
   if (loading && dps.length === 0) {
@@ -1232,17 +1236,30 @@ const DPManagement: React.FC = () => {
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6">
         <div className="flex gap-2 mb-4">
           <button
-            onClick={() => setActiveTab('all')}
+            onClick={() => { setActiveTab('all'); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-xl font-bold transition-all ${
               activeTab === 'all'
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
                 : 'bg-gray-50 text-gray-700 border-2 border-gray-200 hover:bg-gray-100'
             }`}
           >
-            جميع العائلات ({dps.filter(d => d.registrationStatus !== 'قيد الانتظار').length})
+            جميع العائلات ({stats.total})
           </button>
           <button
-            onClick={() => setActiveTab('قيد الانتظار')}
+            onClick={() => { setActiveTab('موافق'); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'موافق'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
+                : 'bg-gray-50 text-gray-700 border-2 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            المعتمدة ({stats.approved})
+          </button>
+          <button
+            onClick={() => { setActiveTab('قيد الانتظار'); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
               activeTab === 'قيد الانتظار'
                 ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg'
