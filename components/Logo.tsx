@@ -5,9 +5,9 @@ interface LogoProps {
   /** 
    * Predefined size presets:
    * sm: 48px (Browser-tab scale / Compact UI)
-   * md: 160px (Header Square / Standard)
-   * lg: 300px (Footer / Large Page Sections)
-   * xl: 400px (Hero / Splash Screens)
+   * md: 120px (Standard / Cards)
+   * lg: 160px (Login / Hero headers)
+   * xl: 240px (Large Hero / Splash screens)
    */
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Custom width in pixels, overrides size preset */
@@ -23,12 +23,12 @@ const Logo: React.FC<LogoProps> = ({
   showFullText = false,
   className = ''
 }) => {
-  // Size mapping based on professional standards
+  // Size mapping based on professional standards for the login card
   const sizeMap = {
-    sm: 48,   // Favicon/Compact scale
-    md: 160,  // Header (Square/Vertical)
-    lg: 200,  // Footer scale
-    xl: 250   // Large Hero scale
+    sm: 48,
+    md: 120,
+    lg: 160,
+    xl: 240
   };
 
   const baseWidth = width || sizeMap[size];
@@ -43,7 +43,7 @@ const Logo: React.FC<LogoProps> = ({
           height: 'auto',
           maxWidth: '100%'
         }}
-        className="block transition-all duration-300"
+        className="block transition-all duration-300 drop-shadow-sm"
       />
       {showFullText && (
         <div className="mt-4 text-center">
