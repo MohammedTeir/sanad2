@@ -64,7 +64,7 @@ class AuthService {
   }): Promise<AuthUser | null> {
     try {
       // Call the backend API to create a user (requires admin privileges)
-      const response = await makeAuthenticatedRequest('http://localhost:3001/api/users', {
+      const response = await makeAuthenticatedRequest('/users', {
         method: 'POST',
         body: JSON.stringify({
           email: userData.email,
@@ -131,7 +131,7 @@ class AuthService {
 
   async getCurrentUserProfile(): Promise<AuthUser | null> {
     try {
-      const user = await makeAuthenticatedRequest('http://localhost:3001/api/users/profile');
+      const user = await makeAuthenticatedRequest('/users/profile');
       
       this.currentUser = {
         id: user.id,
@@ -177,7 +177,7 @@ class AuthService {
 
     try {
       // Get permissions for the user's role from the backend API
-      const permissions = await makeAuthenticatedRequest(`http://localhost:3001/api/permissions/role/${this.currentUser.role}`);
+      const permissions = await makeAuthenticatedRequest(`/permissions/role/${this.currentUser.role}`);
 
       // Find if there's a permission entry for this resource and action
       const resourcePermission = permissions.find(
@@ -194,7 +194,7 @@ class AuthService {
 
   async getAllPermissions(): Promise<any[]> {
     try {
-      return await makeAuthenticatedRequest('http://localhost:3001/api/permissions');
+      return await makeAuthenticatedRequest('/permissions');
     } catch (error) {
       console.error('Error getting all permissions:', error);
       return [];
@@ -203,7 +203,7 @@ class AuthService {
 
   async assignPermission(role: Role, resource: string, action: string): Promise<any> {
     try {
-      return await makeAuthenticatedRequest('http://localhost:3001/api/permissions', {
+      return await makeAuthenticatedRequest('/permissions', {
         method: 'POST',
         body: JSON.stringify({
           role,
@@ -220,7 +220,7 @@ class AuthService {
 
   async removePermission(permissionId: string): Promise<void> {
     try {
-      await makeAuthenticatedRequest(`http://localhost:3001/api/permissions/${permissionId}`, {
+      await makeAuthenticatedRequest(`/permissions/${permissionId}`, {
         method: 'DELETE'
       });
     } catch (error) {
@@ -231,7 +231,7 @@ class AuthService {
 
   async updateUser(userId: string, updates: Partial<AuthUser>): Promise<AuthUser> {
     try {
-      const user = await makeAuthenticatedRequest(`http://localhost:3001/api/users/${userId}`, {
+      const user = await makeAuthenticatedRequest(`/users/${userId}`, {
         method: 'PUT',
         body: JSON.stringify(updates)
       });

@@ -1,6 +1,7 @@
 import { supabaseService } from './supabase';
 import { Camp, DPProfile, InventoryItem, TransferRequest, AidTransaction, AidCampaign, Role } from '../types';
 import { auditService } from './auditService';
+import { makePublicRequest } from '../utils/apiUtils';
 
 // Vulnerability scores are automatically calculated by database triggers on INSERT/UPDATE
 
@@ -22,20 +23,10 @@ export const realDataService = {
   async authenticateUser(email: string, password: string, role: Role) {
     try {
       // Call the backend API to authenticate the user and receive a real JWT
-      const response = await fetch('http://localhost:3001/api/login', { // Update this URL to your backend
+      const { token, user } = await makePublicRequest<{ token: string; user: any }>('/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ email, password, role }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Authentication failed');
-      }
-
-      const { token, user } = await response.json();
       
       // Store the real JWT token in localStorage
       localStorage.setItem('auth_token', token);

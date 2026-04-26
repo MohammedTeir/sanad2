@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { realDataService } from '../../services/realDataServiceBackend';
-import { makeAuthenticatedRequest } from '../../utils/apiUtils';
+import { makeAuthenticatedRequest, makeBlobRequest } from '../../utils/apiUtils';
 import { getAuthToken } from '../../utils/authUtils';
 import Toast from '../../components/Toast';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -128,63 +128,8 @@ const GlobalBackupCenter = () => {
 
   const handleDownload = async (backup: BackupOperation) => {
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      const apiUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001/api';
+      const blob = await makeBlobRequest(`/backup-sync/download/${backup.id}`);
       
-      // Implement retry logic for 429 errors
-      let retryCount = 0;
-      const MAX_RETRIES = 3;
-      const BASE_RETRY_DELAY_MS = 1000;
-      
-      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-      
-      const calculateRetryDelay = (retryCount: number, retryAfterHeader: string | null): number => {
-        if (retryAfterHeader) {
-          const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-          if (!isNaN(retryAfterSeconds)) {
-            return retryAfterSeconds * 1000;
-          }
-        }
-        const exponentialDelay = BASE_RETRY_DELAY_MS * Math.pow(2, retryCount);
-        const jitter = Math.random() * 1000;
-        return exponentialDelay + jitter;
-      };
-      
-      let response;
-      while (retryCount <= MAX_RETRIES) {
-        response = await fetch(`${apiUrl}/backup-sync/download/${backup.id}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          // Handle 429 Too Many Requests with retry logic
-          if (response.status === 429 && retryCount < MAX_RETRIES) {
-            const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
-            const delay = calculateRetryDelay(retryCount, retryAfter);
-            
-            console.warn(`[Rate Limit] Hit 429 error on download. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-            
-            await sleep(delay);
-            retryCount++;
-            continue;
-          }
-          
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Download failed: ${response.statusText}`);
-        }
-        
-        break; // Success, exit the retry loop
-      }
-
-      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

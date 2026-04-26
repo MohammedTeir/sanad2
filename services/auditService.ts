@@ -1,6 +1,7 @@
 import { supabaseService } from './supabase';
 import { storageService } from './storage';
 import { DPProfile, InventoryItem } from '../types';
+import { makePublicRequest } from '../utils/apiUtils';
 
 export interface AuditLogEntry {
   id: string;
@@ -32,72 +33,24 @@ export interface SystemOperationLog {
  * Service for managing audit logs and system operations
  */
 export class AuditService {
-  // Retry configuration for 429 errors
-  private static readonly MAX_RETRIES = 3;
-  private static readonly BASE_RETRY_DELAY_MS = 1000;
-
-  private sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-
-  private calculateRetryDelay = (retryCount: number, retryAfterHeader: string | null): number => {
-    if (retryAfterHeader) {
-      const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-      if (!isNaN(retryAfterSeconds)) {
-        return retryAfterSeconds * 1000;
-      }
-    }
-    const exponentialDelay = AuditService.BASE_RETRY_DELAY_MS * Math.pow(2, retryCount);
-    const jitter = Math.random() * 1000;
-    return exponentialDelay + jitter;
-  };
-
   /**
    * Logs an operation to the audit trail
    */
   async logOperation(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<void> {
     try {
-      const apiUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001/api';
-
-      let retryCount = 0;
-      let response;
-      
-      while (retryCount <= AuditService.MAX_RETRIES) {
-        response = await fetch(`${apiUrl}/api/reports/log-operation`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: entry.userId,
-            operation_type: entry.operationType,
-            resource_type: entry.resourceType,
-            resource_id: entry.resourceId,
-            old_values: entry.oldValue || {},
-            new_values: entry.newValue || {},
-            ip_address: entry.ipAddress || '',
-            user_agent: entry.userAgent || '',
-          }),
-        });
-
-        if (!response.ok) {
-          // Handle 429 Too Many Requests with retry logic
-          if (response.status === 429 && retryCount < AuditService.MAX_RETRIES) {
-            const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
-            const delay = this.calculateRetryDelay(retryCount, retryAfter);
-            
-            console.warn(`[Rate Limit] Hit 429 error on logOperation. Retry ${retryCount + 1}/${AuditService.MAX_RETRIES} after ${Math.round(delay)}ms`);
-            
-            await this.sleep(delay);
-            retryCount++;
-            continue;
-          }
-          
-          const errorData = await response.json().catch(() => ({}));
-          console.debug('Audit logging response:', response.status, errorData.error || 'Unknown error');
-          break; // Don't retry other errors for audit logging
-        }
-        
-        break; // Success, exit the retry loop
-      }
+      await makePublicRequest('/reports/log-operation', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: entry.userId,
+          operation_type: entry.operationType,
+          resource_type: entry.resourceType,
+          resource_id: entry.resourceId,
+          old_values: entry.oldValue || {},
+          new_values: entry.newValue || {},
+          ip_address: entry.ipAddress || '',
+          user_agent: entry.userAgent || '',
+        }),
+      });
     } catch (error) {
       console.debug('Audit logging skipped (expected for public operations):', error instanceof Error ? error.message : error);
     }

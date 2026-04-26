@@ -2,31 +2,13 @@
 import { Camp, DPProfile, InventoryItem, TransferRequest, AidTransaction, AidCampaign, Role, User, FieldPermission } from '../types';
 import { auditService } from './auditService';
 import { sessionService } from './sessionService';
-import { makeAuthenticatedRequest } from '../utils/apiUtils';
+import { makeAuthenticatedRequest, makePublicRequest, getApiUrl } from '../utils/apiUtils';
 
 // Vulnerability scores are automatically calculated by database triggers on INSERT/UPDATE
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:3001/api';
+const BACKEND_API_URL = getApiUrl();
 
 const delay = (ms: number = 300) => new Promise(res => setTimeout(res, ms));
-
-// Retry configuration for 429 errors
-const MAX_RETRIES = 3;
-const BASE_RETRY_DELAY_MS = 1000;
-
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-
-const calculateRetryDelay = (retryCount: number, retryAfterHeader: string | null): number => {
-  if (retryAfterHeader) {
-    const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-    if (!isNaN(retryAfterSeconds)) {
-      return retryAfterSeconds * 1000;
-    }
-  }
-  const exponentialDelay = BASE_RETRY_DELAY_MS * Math.pow(2, retryCount);
-  const jitter = Math.random() * 1000;
-  return exponentialDelay + jitter;
-};
 
 // Helper function to calculate age from date of birth
 const calculateAgeFromDate = (dateOfBirth: string): number => {
@@ -70,20 +52,10 @@ export const realDataService = {
   async authenticateUser(email: string, password: string, role: Role) {
     try {
       // Call the backend API to authenticate the user and receive a real JWT
-      const response = await fetch(`${BACKEND_API_URL}/auth/login`, {
+      const { token, user } = await makePublicRequest<{ token: string; user: any }>('/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ email, password, role }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Authentication failed');
-      }
-
-      const { token, user } = await response.json();
 
       // Store the real JWT token in localStorage
       localStorage.setItem('auth_token', token);
@@ -109,20 +81,10 @@ export const realDataService = {
   async authenticateDP(nationalId: string) {
     try {
       // Call the backend API to authenticate the DP (beneficiary) and receive a JWT
-      const response = await fetch(`${BACKEND_API_URL}/auth/dp-login`, {
+      const { token, family } = await makePublicRequest<{ token: string; family: any }>('/auth/dp-login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ national_id: nationalId }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Authentication failed');
-      }
-
-      const { token, family } = await response.json();
 
       // Store the real JWT token in localStorage
       localStorage.setItem('auth_token', token);
@@ -611,7 +573,7 @@ export const realDataService = {
     await delay(); // Simulate network delay
     try {
       console.log('[getDPById] Fetching DP:', id);
-      console.log('[getDPById] Backend API URL:', process.env.BACKEND_API_URL || 'http://localhost:3001/api');
+      console.log('[getDPById] Backend API URL:', BACKEND_API_URL);
 
       let familyRecord = null;
       try {
@@ -839,31 +801,12 @@ export const realDataService = {
     }
   },
 
-  async lookupFamilyByNationalId(nationalId: string, retryCount = 0): Promise<{ id: string; nationalId: string; name: string; status: string; campId?: string } | null> {
+  async lookupFamilyByNationalId(nationalId: string): Promise<{ id: string; nationalId: string; name: string; status: string; campId?: string } | null> {
     try {
-      const response = await fetch(`${BACKEND_API_URL}/public/families/lookup?national_id=${encodeURIComponent(nationalId)}`);
+      const data = await makePublicRequest<{ id: string; national_id: string; name: string; status: string; camp_id?: string }>(
+        `/public/families/lookup?national_id=${encodeURIComponent(nationalId)}`
+      );
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null; // Family not found
-        }
-
-        // Handle 429 Too Many Requests with retry logic
-        if (response.status === 429 && retryCount < MAX_RETRIES) {
-          const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
-          const delay = calculateRetryDelay(retryCount, retryAfter);
-
-          console.warn(`[Rate Limit] Hit 429 error. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-
-          await sleep(delay);
-          return this.lookupFamilyByNationalId(nationalId, retryCount + 1);
-        }
-
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API request failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       return {
         id: data.id,
         nationalId: data.national_id,
@@ -871,7 +814,10 @@ export const realDataService = {
         status: data.status,
         campId: data.camp_id
       };
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.status === 404) {
+        return null; // Family not found
+      }
       console.error('Error looking up family:', error);
       return null;
     }
@@ -1007,40 +953,10 @@ export const realDataService = {
       let response;
       if (isPublicRegistration) {
         // For public registration, use the public endpoint that doesn't require auth
-        // Implement retry logic for 429 errors
-        let publicResponse;
-        let retryCount = 0;
-
-        while (retryCount <= MAX_RETRIES) {
-          publicResponse = await fetch(`${BACKEND_API_URL}/public/families`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(familyRecord)
-          });
-
-          if (!publicResponse.ok) {
-            // Handle 429 Too Many Requests with retry logic
-            if (publicResponse.status === 429 && retryCount < MAX_RETRIES) {
-              const retryAfter = publicResponse.headers.get('Retry-After') || publicResponse.headers.get('RateLimit-Reset');
-              const delay = calculateRetryDelay(retryCount, retryAfter);
-
-              console.warn(`[Rate Limit] Hit 429 error on saveDP. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-
-              await sleep(delay);
-              retryCount++;
-              continue;
-            }
-
-            const errorData = await publicResponse.json().catch(() => ({}));
-            throw new Error(errorData.error || `API request failed: ${publicResponse.statusText}`);
-          }
-
-          break; // Success, exit the retry loop
-        }
-
-        response = await publicResponse.json();
+        response = await makePublicRequest('/public/families', {
+          method: 'POST',
+          body: JSON.stringify(familyRecord)
+        });
       } else {
         if (await this.getDPById(dp.id)) {
           // Update existing family (authenticated)
@@ -1111,34 +1027,7 @@ export const realDataService = {
 
       if (isPublicRegistration) {
         // For public registration, use the public endpoint that doesn't require auth
-        // Implement retry logic for 429 errors
-        let response;
-        let retryCount = 0;
-
-        while (retryCount <= MAX_RETRIES) {
-          response = await fetch(`${BACKEND_API_URL}/public/camps`);
-
-          if (!response.ok) {
-            // Handle 429 Too Many Requests with retry logic
-            if (response.status === 429 && retryCount < MAX_RETRIES) {
-              const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
-              const delay = calculateRetryDelay(retryCount, retryAfter);
-
-              console.warn(`[Rate Limit] Hit 429 error on getCamps. Retry ${retryCount + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-
-              await sleep(delay);
-              retryCount++;
-              continue;
-            }
-
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `API request failed: ${response.statusText}`);
-          }
-
-          break; // Success, exit the retry loop
-        }
-
-        campRecords = await response.json();
+        campRecords = await makePublicRequest('/public/camps');
       } else {
         campRecords = await makeAuthenticatedRequest('/camps');
       }
@@ -1191,18 +1080,10 @@ export const realDataService = {
 
       if (isPublicRegistration) {
         // For public registration, use the public endpoint that doesn't require auth
-        const response = await fetch(`${BACKEND_API_URL}/public/camps/register`, {
+        await makePublicRequest('/public/camps/register', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(campRecord)
         });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to register camp');
-        }
       } else {
         if (await this.getCampById(camp.id)) {
           // Update existing camp

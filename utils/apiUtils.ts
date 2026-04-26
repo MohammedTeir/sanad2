@@ -2,7 +2,7 @@
 import { decodeAuthToken } from './authUtils';
 
 // Base API URL from environment
-const getApiUrl = () => {
+export const getApiUrl = () => {
   return import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3001/api';
 };
 
@@ -183,6 +183,49 @@ export const makeAuthenticatedRequest = async <T = any>(
   inFlightRequests.set(requestKey, requestPromise);
 
   return requestPromise;
+};
+
+/**
+ * Make authenticated API request that returns a Blob
+ */
+export const makeBlobRequest = async (
+  endpoint: string,
+  options: RequestInit = {},
+  retryCount = 0
+): Promise<Blob> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('No authentication token found');
+
+  const apiUrl = getApiUrl();
+  const url = endpoint.startsWith('http') ? endpoint : `${apiUrl}${endpoint}`;
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 429 && retryCount < MAX_RETRIES) {
+      const retryAfter = response.headers.get('Retry-After') || response.headers.get('RateLimit-Reset');
+      const delay = calculateRetryDelay(retryCount, retryAfter);
+      await sleep(delay);
+      return makeBlobRequest(endpoint, options, retryCount + 1);
+    }
+
+    let errorMessage = `Download failed: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData?.error || errorMessage;
+    } catch {
+      // Not JSON
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response.blob();
 };
 
 /**
